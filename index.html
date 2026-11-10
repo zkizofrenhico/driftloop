@@ -175,7 +175,7 @@ const I18N_EN = {
   'Copialo y guardalo (en tus notas o mandátelo por WhatsApp). Con este código recuperás toda tu partida en cualquier celular.': 'Copy it and keep it (in your notes or send it to yourself on WhatsApp). This code restores your whole save on any phone.',
   'Pegá acá tu código de respaldo. Se reemplaza la partida actual.': 'Paste your backup code here. It replaces the current save.',
   'Ese código no es válido. Revisá que esté completo.': "That code isn't valid. Check that it's complete.",
-  'última carrera': 'last race', 'Música': 'Music', 'Locutor': 'Announcer', 'Anuncia la última vuelta, récords y resultados': 'Calls out the final lap, records and results',
+  'última carrera': 'last race', 'No se pudo compartir el clip.': "Couldn't share the clip.", 'Música': 'Music', 'Locutor': 'Announcer', 'Anuncia la última vuelta, récords y resultados': 'Calls out the final lap, records and results',
   '¡Última vuelta!': 'Final lap!', '¡Nuevo récord!': 'New record!', '¡Salida perfecta!': 'Perfect start!', '¡Récord de vuelta!': 'Lap record!', 'COBRAR': 'COLLECT', 'Entrá todos los días para que la racha crezca y pague más.': 'Come back every day so your streak grows and pays more.', 'Volvé mañana para seguir sumando.': 'Come back tomorrow to keep it going.',
   'PISTA DE HIELO': 'ICE TRACK', 'Todo el circuito con muy poco agarre': 'Very little grip on the whole track', 'SIN FRENOS': 'NO BRAKES', 'Los frenos casi no andan: soltá mucho antes': 'The brakes barely work: let go much earlier',
   'TURBO PARA TODOS': 'TURBO FOR ALL', 'Todos los autos van un 15% más rápido': 'Every car is 15% faster', 'TORMENTA ETERNA': 'ENDLESS STORM', 'Lluvia fuerte y de noche toda la carrera': 'Heavy rain at night the whole race',
@@ -702,6 +702,48 @@ function drawAmbient(R) {
     }
   }
   ctx.globalAlpha = 1;
+}
+/* =====================================================================
+   APP NATIVA (Capacitor): vibración, voz del locutor, notificaciones y compartir el clip.
+   En el navegador NATIVE es false y todo sigue usando las funciones web.
+   ===================================================================== */
+var NATIVE = (function () { try { return !!(window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform()); } catch(e) { return false; } })();
+function NP(name) { try { return NATIVE && Capacitor.Plugins ? Capacitor.Plugins[name] || null : null; } catch(e) { return null; } }
+function vibrate(ms) {
+  const H = NP('Haptics');
+  if (H) { (ms > 55 ? H.impact({ style: 'HEAVY' }) : H.vibrate({ duration: Math.round(ms) })).catch(() => {}); return; }
+  try { navigator.vibrate && navigator.vibrate(ms); } catch(e) {}
+}
+function nativeSay(text, prio) {
+  const T = NP('TextToSpeech'); if (!T) return false;
+  (prio ? T.stop() : Promise.resolve()).catch(() => {}).then(() => T.speak({ text, lang: EN ? 'en-US' : 'es-AR', rate: 1.1, pitch: 0.9, volume: Math.min(1, SET.vol + 0.1), category: 'ambient' })).catch(() => {});
+  return true;
+}
+// notificación local para mañana a las 10: circuito del día y racha (sin servidor)
+async function nativeScheduleDaily() {
+  const N = NP('LocalNotifications'); if (!N || !prof.notifOk) return;
+  try {
+    const at = new Date(); at.setDate(at.getDate() + 1); at.setHours(10, rand(0, 20)|0, 0, 0);
+    const n = prof.streak && prof.streak.n > 1 ? prof.streak.n : 0;
+    await N.cancel({ notifications: [{ id: 1 }] }).catch(() => {});
+    await N.schedule({ notifications: [{ id: 1, schedule: { at },
+      title: n ? (EN ? `🔥 Don't lose your ${n}-day streak` : `🔥 No pierdas tu racha de ${n} días`) : (EN ? '🏁 New daily track!' : '🏁 ¡Nuevo circuito del día!'),
+      body: EN ? 'Today\'s track is ready and pays double. Come race!' : 'El circuito de hoy ya está listo y paga el doble. ¡Vení a correr!' }] });
+  } catch(e) {}
+}
+async function nativeAskNotif() {
+  const N = NP('LocalNotifications'); if (!N || prof.notifAsked) return;
+  prof.notifAsked = true; saveProf();
+  try { const r = await N.requestPermissions(); prof.notifOk = r && r.display === 'granted'; saveProf(); } catch(e) {}
+}
+if (NATIVE) document.addEventListener('visibilitychange', () => { if (document.hidden) nativeScheduleDaily(); });
+// compartir el clip desde la app: se guarda en la caché y se abre el menú de compartir de Android
+async function nativeShareClip(blob, name) {
+  const F = NP('Filesystem'), S = NP('Share'); if (!F || !S) return false;
+  const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(blob); });
+  const w = await F.writeFile({ path: name, data: b64, directory: 'CACHE' });
+  await S.share({ title: 'Drift Loop', text: EN ? 'Look at this lap in Drift Loop 🏁' : 'Mirá esta vuelta en Drift Loop 🏁', files: [w.uri] });
+  return true;
 }
 // ---- gotas de lluvia sobre la "lente" de la cámara ----
 const LENS = [];
@@ -2165,7 +2207,7 @@ function impact(power, x, y, mine) {
   if (near) for (let i = 0; i < Math.min(18, 4 + power/30); i++) part(x, y, rand(-220, 220), rand(-220, 220), rand(0.2, 0.45), rand(2, 4), '#ffcf5a', 0);
   if (mine || near) sfxCrash(mine ? power : power*0.4);
   if (mine && power > 50 && state === 'race' && player.st) player.st.crashes++;
-  if (mine && power > 50 && SET.vib) { try { navigator.vibrate && navigator.vibrate(Math.min(80, 20 + power/8)); } catch(e) {} }
+  if (mine && power > 50 && SET.vib) vibrate(Math.min(80, 20 + power/8));
 }
 
 /* =====================================================================
@@ -2492,6 +2534,7 @@ function playerFinished() {
     if (player.pos <= 3 && prof.dailyPod !== (DAILY && DAILY.date)) { prof.dailyPod = DAILY && DAILY.date; player.earn += 1000; player.earnParts.dailyPod = true; } }
   prof.money += player.earn; prof.earned = (prof.earned || 0) + player.earn; saveProf();
   if (eventMode) eventReward();
+  if (NATIVE && !prof.notifAsked) setTimeout(nativeAskNotif, 5000);
   sfxBlip(player.pos === 1 ? 1320 : 520, 0.4);
   player.xpGain = addXP(raceXP()*(eventMode ? 2 : 1));
   afterRace();
@@ -5503,7 +5546,7 @@ function rpClipReady() {
 }
 function openClipPanel() {
   if (!rpClip) return;
-  const canShare = navigator.canShare && navigator.canShare({ files: [rpClip.file] });
+  const canShare = NATIVE || (navigator.canShare && navigator.canShare({ files: [rpClip.file] }));
   bkEl.innerHTML = `<div class="box"><h3>🎬 TU CLIP</h3>
     <video src="${rpClip.url}" autoplay loop muted playsinline style="width:100%;max-height:52vh;border-radius:8px;background:#000"></video><div class="msg"></div>
     <div class="row"><button data-b="close">CERRAR</button>${canShare ? '<button class="go" data-b="share">📲 COMPARTIR</button>' : `<a class="wa" href="${rpClip.url}" download="${rpClip.file.name}">💾 GUARDAR</a>`}</div></div>`;
@@ -5511,6 +5554,7 @@ function openClipPanel() {
   const msg = bkEl.querySelector('.msg');
   bkEl.querySelectorAll('[data-b]').forEach(b => b.onclick = () => {
     if (b.dataset.b === 'close') { bkEl.style.display = 'none'; return; }
+    if (NATIVE) { nativeShareClip(rpClip.blob, rpClip.file.name).catch(() => { msg.style.color = '#ffd23f'; msg.textContent = 'No se pudo compartir el clip.'; }); return; }
     navigator.share({ files: [rpClip.file], text: EN ? 'Look at this lap in Drift Loop 🏁 https://zkizofrenhico.github.io/driftloop/' : 'Mirá esta vuelta en Drift Loop 🏁 https://zkizofrenhico.github.io/driftloop/' })
       .catch(err => { if (err && err.name !== 'AbortError') { msg.style.color = '#ffd23f'; msg.textContent = 'No se pudo compartir desde acá. Probá desde zkizofrenhico.github.io/driftloop'; } });
   });
@@ -5831,10 +5875,13 @@ function pickVoice() {
 }
 try { if (window.speechSynthesis) speechSynthesis.onvoiceschanged = () => { VOICE.v = pickVoice(); }; } catch(e) {}
 function say(text, prio) {
-  if (SET.voice === false || AU.muted || !window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') return;
+  if (SET.voice === false || AU.muted) return;
   const now = performance.now(); if (!prio && now - VOICE.last < 1400) return;
+  const tt = tr(text).replace(/[^\p{L}\p{N}¡!¿?,.' ]/gu, '').trim(); if (!tt) return;
+  if (NATIVE && nativeSay(tt, prio)) { VOICE.last = now; return; }
+  if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') return;
   try {
-    const t = tr(text).replace(/[^\p{L}\p{N}¡!¿?,.' ]/gu, '').trim(); if (!t) return;
+    const t = tt;
     if (prio) speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(t); VOICE.v = VOICE.v || pickVoice();
     if (VOICE.v) u.voice = VOICE.v; u.lang = VOICE.v ? VOICE.v.lang : (EN ? 'en-US' : 'es-AR');
