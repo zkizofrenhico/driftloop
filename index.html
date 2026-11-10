@@ -4838,7 +4838,7 @@ async function fbToken() {
     if (r.ok) { j = await r.json(); fbAuth = { idToken: j.id_token, refreshToken: j.refresh_token, uid: j.user_id, exp: Date.now() + (+j.expires_in || 3600)*1000 }; fbSave(); return fbAuth.idToken; }
   }
   r = await fbFetch('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=' + FB.key, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"returnSecureToken":true}' });
-  if (!r.ok) throw new Error('auth ' + r.status);
+  if (!r.ok) { let m = ''; try { m = ((await r.json()).error || {}).message || ''; } catch(e) {} const e = new Error('auth ' + r.status + ' ' + m); e.detail = 'auth ' + r.status + (m ? ' · ' + m : ''); throw e; }
   j = await r.json(); fbAuth = { idToken: j.idToken, refreshToken: j.refreshToken, uid: j.localId, exp: Date.now() + (+j.expiresIn || 3600)*1000 }; fbSave();
   return fbAuth.idToken;
 }
@@ -4849,7 +4849,7 @@ async function fsReq(method, path, body) {
   const tk = await fbToken();
   const r = await fbFetch(FS_BASE + path, { method, headers: { Authorization: 'Bearer ' + tk, 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
   if (r.status === 404) return null;
-  if (!r.ok) { const e = new Error('fs ' + r.status); e.status = r.status; throw e; }
+  if (!r.ok) { let m = ''; try { const j = await r.json(); m = (j.error || {}).status || (j.error || {}).message || ''; } catch(e) {} const e = new Error('fs ' + r.status); e.status = r.status; e.detail = 'db ' + r.status + (m ? ' · ' + m : ''); throw e; }
   return r.json();
 }
 // ---- operaciones de liga ----
@@ -4896,7 +4896,10 @@ function lgOnRecord() { if ((prof.leagues || []).length && TRACK_KEY !== 'diaria
 
 // ---- panel ----
 let lgSel = 0, lgCache = {};
-function lgErr(e) { return !navigator.onLine ? 'Sin conexión a internet.' : e && e.status === 403 ? 'El servidor rechazó el pedido. Probá de nuevo.' : 'No se pudo conectar con el servidor de ligas.'; }
+function lgErr(e) {
+  const d = e && (e.detail || (e.name === 'AbortError' ? 'timeout' : e.name === 'TypeError' ? 'red bloqueada' : String(e.message || e)));
+  return (!navigator.onLine ? 'Sin conexión a internet.' : e && e.status === 403 ? 'El servidor rechazó el pedido. Probá de nuevo.' : 'No se pudo conectar con el servidor de ligas.') + (d ? ` <small style="display:block;opacity:.7;font-size:12px">(${d})</small>` : '');
+}
 function openLeaguePanel(msg) {
   prof.leagues = prof.leagues || [];
   const L = prof.leagues, cur = L[Math.min(lgSel, L.length - 1)];
