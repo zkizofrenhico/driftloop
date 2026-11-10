@@ -5641,11 +5641,25 @@ function synthLoop(kind) {
   return { SR, L, R };
 }
 const MUS = { bufs: {}, cur: null, kind: '', bus: null, gen: {} };
-function musBuffer(kind) {
-  if (MUS.bufs[kind]) return MUS.bufs[kind];
-  const s = synthLoop(kind), ac = AU.ac, buf = ac.createBuffer(2, s.L.length, s.SR);
+function musStore(kind, s) {
+  const ac = AU.ac, buf = ac.createBuffer(2, s.L.length, s.SR);
   buf.getChannelData(0).set(s.L); buf.getChannelData(1).set(s.R);
   return (MUS.bufs[kind] = buf);
+}
+// la música se genera en un hilo aparte (Web Worker) para no trabar la animación; si no se puede, en el principal
+let musWorker = null;
+function musBuffer(kind) {
+  if (MUS.bufs[kind]) return MUS.bufs[kind];
+  try {
+    if (!musWorker && typeof Worker !== 'undefined') {
+      const src = synthLoop.toString() + '\nonmessage = e => { const r = synthLoop(e.data); postMessage({ kind: e.data, r }, [r.L.buffer, r.R.buffer]); };';
+      musWorker = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+      musWorker.onmessage = e => { try { musStore(e.data.kind, e.data.r); } catch(err) {} };
+      musWorker.onerror = () => { musWorker = false; MUS.gen = {}; };
+    }
+    if (musWorker) { musWorker.postMessage(kind); return null; }
+  } catch(e) { musWorker = false; }
+  return musStore(kind, synthLoop(kind));
 }
 function musVolume() { return (SET.music === undefined ? 0.55 : SET.music)*0.42; }
 function musWanted() {
@@ -6105,7 +6119,7 @@ function showErr() {
 }
 let ecoLast = 0;
 function frame(now) {
-  if (ECO && now - ecoLast < 30) { requestAnimationFrame(frame); return; }   // modo ahorro: 30 cuadros por segundo
+  if (now - ecoLast < (ECO ? 30 : 10)) { requestAnimationFrame(frame); return; }   // ahorro: 30 cuadros por segundo; pantallas de 120 Hz: tope de 60
   ecoLast = now;
   const raw = Math.max(0, (now - last)/1000); let dt = Math.min(ECO ? 0.05 : 0.033, raw); last = Math.max(last, now);
   if (tut && !paused) dt *= tutTick(dt);
