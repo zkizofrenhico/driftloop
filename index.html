@@ -1003,7 +1003,7 @@ if (TRK.surf) for (const [a, b, t] of TRK.surf) {
   for (let i = i0; i <= i1; i++) { const j = i % TR.N; x0 = Math.min(x0, TR.X[j]); x1 = Math.max(x1, TR.X[j]); y0 = Math.min(y0, TR.Y[j]); y1 = Math.max(y1, TR.Y[j]); }
   const o = {}, ends = [];
   for (const i of [i0, i1 % TR.N]) { worldPos(i*TR.step, 0, o); ends.push([o.wx, o.wy]); }
-  surfSegs.push({ i0, i1, ti, path: offsetPath(0, i0, i1, 2), ruts: [offsetPath(i => apexD(i) - 9, i0, i1, 2), offsetPath(i => apexD(i) + 9, i0, i1, 2)],
+  surfSegs.push({ i0, i1, ti, path: offsetPath(0, i0, i1, 2), ruts: [offsetPath(i => apexD(i), i0, i1, 2)],
                   line: offsetPath(apexD, i0, i1, 2), ends, bb: [x0 - 140, y0 - 140, x1 + 140, y1 + 140] });
 }
 
@@ -1253,7 +1253,8 @@ function bakeTile(ti, tj) {
     g.lineWidth = (HALF_W + CURB)*2; g.strokeStyle = pat(st.tex()); g.stroke(sg.path);
     if (st.over) { g.strokeStyle = st.over; g.stroke(sg.path); }
     if (st.line) { g.lineWidth = 34; g.strokeStyle = st.line; g.stroke(sg.line); }
-    if (st.rut) { g.lineWidth = 6; g.strokeStyle = st.rut; for (const r of sg.ruts) g.stroke(r); }
+    // la tierra gastada por donde pasan todos: una franja suave, no dos surcos (parecían huellas de autos que no estaban)
+    if (st.rut) { g.save(); g.lineCap = 'round'; g.strokeStyle = st.rut; for (const [w, a] of [[34, 0.22], [20, 0.3]]) { g.lineWidth = w; g.globalAlpha = a; for (const r of sg.ruts) g.stroke(r); } g.restore(); }
     if (st.gloss) { g.lineWidth = HALF_W*0.9; g.strokeStyle = st.gloss; g.stroke(sg.line); }
     if (WX.bakeWet) { g.lineWidth = (HALF_W + CURB)*2; g.strokeStyle = sg.ti >= 3 ? 'rgba(60,80,110,.12)' : 'rgba(35,22,12,.32)'; g.stroke(sg.path); }
   }
@@ -2463,7 +2464,8 @@ function stepCar(c, dt, throttle) {
     const front = wi < 2, side = (wi % 2 ? 1 : -1)*(c.cr - 1.5), along = front ? c.ka : -c.kb;
     const x = c.x + fxn*along - fyn*side, y = c.y + fyn*along + fxn*side;
     const loose = onGrass || sf.loose;
-    const marking = (c.v > 40 && (onGrass || (front ? Math.abs(aF) > 0.17 : (Math.abs(aR) > 0.13 || spin > 0.05)))) || (sf.loose && c.v > 60);
+    // en tierra o grava las ruedas traseras dejan surco siempre; las delanteras solo si patinan (si no, pisan el mismo surco y se veían 4 huellas por auto)
+    const marking = (c.v > 40 && (onGrass || (front ? Math.abs(aF) > 0.17 : (Math.abs(aR) > 0.13 || spin > 0.05)))) || (sf.loose && c.v > 60 && (!front || Math.abs(aF) > 0.3));
     const prev = c.wheels[wi];
     if (marking && prev) { if ((x - prev[0])**2 + (y - prev[1])**2 >= 36) { addSkid(prev[0], prev[1], x, y, loose ? 1 : 0); c.wheels[wi] = [x, y]; } }
     else c.wheels[wi] = marking ? [x, y] : null;
