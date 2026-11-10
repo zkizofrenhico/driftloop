@@ -731,11 +731,12 @@ function nativeSay(text, prio) {
 // notificación local para mañana a las 10: circuito del día y racha (sin servidor)
 async function nativeScheduleDaily() {
   const N = NP('LocalNotifications'); if (!N || !prof.notifOk) return;
+  const day = new Date().toDateString() + (prof.streak && prof.streak.n || 0); if (nativeScheduleDaily.d === day) return; nativeScheduleDaily.d = day;
   try {
     const at = new Date(); at.setDate(at.getDate() + 1); at.setHours(10, rand(0, 20)|0, 0, 0);
     const n = prof.streak && prof.streak.n > 1 ? prof.streak.n : 0;
     await N.cancel({ notifications: [{ id: 1 }] }).catch(() => {});
-    await N.schedule({ notifications: [{ id: 1, schedule: { at },
+    await N.schedule({ notifications: [{ id: 1, isExactNotification: false, schedule: { at, allowWhileIdle: false },
       title: n ? (EN ? `🔥 Don't lose your ${n}-day streak` : `🔥 No pierdas tu racha de ${n} días`) : (EN ? '🏁 New daily track!' : '🏁 ¡Nuevo circuito del día!'),
       body: EN ? 'Today\'s track is ready and pays double. Come race!' : 'El circuito de hoy ya está listo y paga el doble. ¡Vení a correr!' }] });
   } catch(e) {}
@@ -2351,7 +2352,7 @@ function press() {
 }
 cv.addEventListener('pointerdown', e => {
   e.preventDefault(); const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
-  if (replayOn) { if (!(RP.rec && RP.rec.state === 'recording')) endReplay(); return; }
+  if (replayOn) { if (!(RP.rec && RP.rec.state === 'recording') && RP.rp && performance.now() - RP.rp.at > 900) endReplay(); return; }   // el mismo toque del botón no la corta
   if (Math.hypot(x - MUTE_BTN.x, y - MUTE_BTN.y) < MUTE_BTN.r + 10) { initAudio(); if (state === 'race' || state === 'countdown') openPause(false); else if (state === 'menu') openPause(true); else setMute(!AU.muted); return; }
   const rb = revBtn();
   if (state === 'race' && !duoMode && Math.hypot(x - rb.x, y - rb.y) < rb.r + 10) { initAudio(); revPointers.add(e.pointerId); try { cv.setPointerCapture(e.pointerId); } catch(_) {} return; }
@@ -5738,10 +5739,12 @@ function rpRecord() {
 function rpAvailable() { return RP.buf.length > 60 && player && player.finished; }
 function startReplay(withClip) {
   if (!rpAvailable()) return;
-  const b = RP.buf, fin = player.finishTime || b[b.length - 1].t;
-  const t1 = Math.min(b[b.length - 1].t, fin + 1.4), t0 = Math.max(b[0].t, t1 - 8.5);
+  const b = RP.buf, last = b[b.length - 1].t; let fin = player.finishTime || last;
+  if (fin < b[0].t || fin > last + 0.5) fin = Math.max(b[0].t, last - 1.6);      // por si el tiempo de llegada no coincide con lo grabado
+  let t1 = Math.min(last, fin + 1.4), t0 = Math.max(b[0].t, t1 - 8.5);
+  if (t1 - t0 < 3) { t1 = last; t0 = Math.max(b[0].t, t1 - 8.5); }
   replayOn = true; tcAdd('replay'); hideRes(); parts.length = 0; popups.length = 0; banners.length = 0;
-  RP.rp = { t0, t1, t: t0, fin, shot: -1, shotT: 0, fix: null, end: false };
+  RP.rp = { t0, t1, t: t0, fin, shot: -1, shotT: 0, fix: null, end: false, at: performance.now() };
   rpNextShot();
   if (withClip) rpStartClip();
 }
