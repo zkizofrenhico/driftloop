@@ -175,7 +175,8 @@ const I18N_EN = {
   'Copialo y guardalo (en tus notas o mandátelo por WhatsApp). Con este código recuperás toda tu partida en cualquier celular.': 'Copy it and keep it (in your notes or send it to yourself on WhatsApp). This code restores your whole save on any phone.',
   'Pegá acá tu código de respaldo. Se reemplaza la partida actual.': 'Paste your backup code here. It replaces the current save.',
   'Ese código no es válido. Revisá que esté completo.': "That code isn't valid. Check that it's complete.",
-  'última carrera': 'last race', 'COBRAR': 'COLLECT', 'Entrá todos los días para que la racha crezca y pague más.': 'Come back every day so your streak grows and pays more.', 'Volvé mañana para seguir sumando.': 'Come back tomorrow to keep it going.',
+  'última carrera': 'last race', 'Música': 'Music', 'Locutor': 'Announcer', 'Anuncia la última vuelta, récords y resultados': 'Calls out the final lap, records and results',
+  '¡Última vuelta!': 'Final lap!', '¡Nuevo récord!': 'New record!', '¡Salida perfecta!': 'Perfect start!', '¡Récord de vuelta!': 'Lap record!', 'COBRAR': 'COLLECT', 'Entrá todos los días para que la racha crezca y pague más.': 'Come back every day so your streak grows and pays more.', 'Volvé mañana para seguir sumando.': 'Come back tomorrow to keep it going.',
   'PISTA DE HIELO': 'ICE TRACK', 'Todo el circuito con muy poco agarre': 'Very little grip on the whole track', 'SIN FRENOS': 'NO BRAKES', 'Los frenos casi no andan: soltá mucho antes': 'The brakes barely work: let go much earlier',
   'TURBO PARA TODOS': 'TURBO FOR ALL', 'Todos los autos van un 15% más rápido': 'Every car is 15% faster', 'TORMENTA ETERNA': 'ENDLESS STORM', 'Lluvia fuerte y de noche toda la carrera': 'Heavy rain at night the whole race',
   'DESDE EL FONDO': 'FROM THE BACK', 'Largás último contra 7 rivales': 'You start last against 7 rivals', '⭐ XP ×2': '⭐ XP ×2', 'PUNTOS': 'POINTS', 'DERRAPES': 'DRIFTS', 'MEJOR': 'BEST', 'MULT. MÁX': 'MAX MULT.', '¡TERMINADO!': 'FINISHED!', 'MULTIPLICADOR ×1': 'MULTIPLIER ×1',
@@ -1985,7 +1986,7 @@ function part(x, y, vx, vy, life, size, col, grow) {
   if (parts.length > (MAXQ ? 900 : 360)) parts.shift();
   parts.push({ x, y, vx, vy, life, max: life, size, col, grow });
 }
-function popup(txt, col, big) { popups.push({ txt, col, big: !!big, t: 0 }); if (popups.length > 4) popups.shift(); }
+function popup(txt, col, big) { popups.push({ txt, col, big: !!big, t: 0 }); if (popups.length > 4) popups.shift(); if (!replayOn) try { sayPopup(txt); } catch(e) {} }
 function nearCam(x, y, r) { return Math.abs(x - cam.x) < r && Math.abs(y - cam.y) < r; }
 
 function damageCar(c, power, wx, wy) {
@@ -3161,7 +3162,7 @@ function drawRaceHUD() {
 }
 /* ---------- carteles grandes (última vuelta, meta) y confeti ---------- */
 const banners = [], confetti = [];
-function banner(t, sub, col, checker) { banners.push({ t, sub, col, checker: !!checker, a: 0 }); }
+function banner(t, sub, col, checker) { banners.push({ t, sub, col, checker: !!checker, a: 0 }); try { sayBanner(t, sub); } catch(e) {} }
 function drawBanners() {
   const dt = Math.min(0.05, lastDt || 0.016);
   for (let i = banners.length - 1; i >= 0; i--) {
@@ -3605,7 +3606,7 @@ function gPreviewLoop(now) {
 /* =====================================================================
    PAUSA Y OPCIONES
    ===================================================================== */
-const SET = prof.set = Object.assign({ vol: 0.9, eng: 1, fx: 1, vib: true, drone: true, names: true, warn: true, laps: 3, rivals: 5, diff: 'normal', quality: 'maxima', lang: 'auto', intro: true, damage: true, mode: 'carrera' }, prof.set || {});
+const SET = prof.set = Object.assign({ vol: 0.9, eng: 1, fx: 1, vib: true, drone: true, names: true, warn: true, laps: 3, rivals: 5, diff: 'normal', quality: 'maxima', lang: 'auto', music: 0.55, voice: true, intro: true, damage: true, mode: 'carrera' }, prof.set || {});
 const DIFFS = { facil: ['Fácil', 0.93], normal: ['Normal', 1.0], dificil: ['Difícil', 1.06] };
 function applySettings() {
   C.movimientoDrone = SET.drone ? 1 : 0;
@@ -3619,6 +3620,7 @@ function audioVolumes() {
   AU.out.gain.value = AU.muted ? 0 : SET.vol;
   AU.engBus.gain.value = SET.eng;
   AU.master.gain.value = 0.9*SET.fx;
+  if (MUS.bus) MUS.bus.gain.value = musVolume();
 }
 let paused = false, pauseFromMenu = false;
 const PCSS = `
@@ -3689,6 +3691,8 @@ function pRender() {
   row('#pSnd', 'General', '', slider('vol', () => { AU.muted = SET.vol === 0; }));
   row('#pSnd', 'Motor', '', slider('eng'));
   row('#pSnd', 'Efectos', 'Derrapes, choques, lluvia…', slider('fx'));
+  row('#pSnd', 'Música', '', slider('music'));
+  row('#pSnd', 'Locutor', 'Anuncia la última vuelta, récords y resultados', toggle('voice'));
   row('#pGame', 'Vibración', 'En choques', toggle('vib'));
   row('#pGame', 'Cámara drone', 'Apagada = cámara fija detrás del auto', toggle('drone', () => { C.movimientoDrone = SET.drone ? 1 : 0; }));
   row('#pGame', 'Nombres de los autos', '', toggle('names'));
@@ -5577,6 +5581,145 @@ function eventMenuHTML(a) {
 #bk .sd i{display:block;font-style:normal;font-size:11px;color:#3dff8a;font-weight:800}`; document.head.appendChild(st); })();
 
 /* =====================================================================
+   MÚSICA (loops sintetizados una sola vez) y LOCUTOR (voz del sistema)
+   ===================================================================== */
+function synthLoop(kind) {
+  const SR = 22050, race = kind === 'race', BPM = race ? 128 : 96, BEAT = 60/BPM, BAR = BEAT*4, BARS = 8, N = Math.round(BAR*BARS*SR);
+  const L = new Float32Array(N), R = new Float32Array(N);
+  let seed = race ? 777 : 4242; const rnd = () => { seed = (seed*1664525 + 1013904223) >>> 0; return seed/2147483648 - 1; };
+  // suma circular: lo que se pasa del final vuelve al principio, así el loop no tiene corte
+  const add = (sig, t, g, pan) => { const i0 = Math.round(t*SR), l = Math.cos(((pan || 0) + 1)*Math.PI/4)*1.414*g, r = Math.sin(((pan || 0) + 1)*Math.PI/4)*1.414*g;
+    for (let i = 0; i < sig.length; i++) { const j = (i0 + i) % N; L[j] += sig[i]*l; R[j] += sig[i]*r; } };
+  const lp = (x, fc) => { const a = 1 - Math.exp(-2*Math.PI*fc/SR); let y = 0; for (let i = 0; i < x.length; i++) { y += a*(x[i] - y); x[i] = y; } return x; };
+  const hp = (x, fc) => { const a = 1 - Math.exp(-2*Math.PI*fc/SR); let y = 0; for (let i = 0; i < x.length; i++) { y += a*(x[i] - y); x[i] = x[i] - y; } return x; };
+  const noise = n => { const x = new Float32Array(n); for (let i = 0; i < n; i++) x[i] = rnd(); return x; };
+  const mtof = m => 440*Math.pow(2, (m - 69)/12);
+  const saw = (f, n, det) => { const x = new Float32Array(n), ds = det ? [-det, 0, det] : [0];
+    for (const d of ds) { const inc = f*(1 + d)/SR; let ph = (rnd() + 1)/2; for (let i = 0; i < n; i++) { ph += inc; ph -= Math.floor(ph); x[i] += (2*ph - 1)/ds.length; } } return x; };
+  const kick = (() => { const n = Math.round(0.35*SR), x = new Float32Array(n); let ph = 0;
+    for (let i = 0; i < n; i++) { const t = i/SR; ph += 2*Math.PI*(48 + 100*Math.exp(-t/0.035))/SR; x[i] = Math.tanh(1.5*Math.sin(ph)*Math.exp(-t/0.22)); } return x; })();
+  const clap = (() => { const n = Math.round(0.25*SR), x = lp(hp(noise(n), 1000), 5000);
+    for (let i = 0; i < n; i++) { const t = i/SR; x[i] *= Math.exp(-t/0.01) + (t > 0.01 ? Math.exp(-(t - 0.01)/0.1) : 0); } return x; })();
+  const hatC = (() => { const n = Math.round(0.05*SR), x = hp(hp(noise(n), 7000), 7000); for (let i = 0; i < n; i++) x[i] *= Math.exp(-i/SR/0.012); return x; })();
+  const hatO = (() => { const n = Math.round(0.2*SR), x = hp(hp(noise(n), 6500), 6500); for (let i = 0; i < n; i++) x[i] *= Math.exp(-i/SR/0.06); return x; })();
+  const CH = race ? [[52, 55, 59], [48, 52, 55], [55, 59, 62], [50, 54, 57]] : [[57, 60, 64, 67], [53, 57, 60, 64], [50, 53, 57, 60], [55, 59, 62, 65]];
+  const ROOT = race ? [40, 36, 43, 38] : [45, 41, 38, 43];
+  for (let b = 0; b < BARS; b++) {
+    const t0 = b*BAR, ch = CH[b % 4], root = ROOT[b % 4], n = Math.round(BAR*SR);
+    // colchón de acordes
+    const pad = new Float32Array(n);
+    for (const m of ch) { const s = saw(mtof(m), n, race ? 0.005 : 0.008); for (let i = 0; i < n; i++) pad[i] += s[i]; }
+    lp(pad, race ? 1200 : 900); for (let i = 0; i < n; i++) pad[i] *= Math.min(1, i/SR/0.15)*Math.min(1, (n - i)/SR/0.1)*(race ? 0.045 : 0.06);
+    add(pad, t0, 0.8, 0);
+    // arpegio
+    const seq = [ch[0], ch[1], ch[2], ch[0] + 12, ch[2], ch[1], ch[0] + 12, ch[2] + 12], steps = race ? 16 : 8;
+    for (let k = 0; k < steps; k++) {
+      const m = seq[k % 8] + 12, nn = Math.round(BAR/steps*SR*0.9), f = mtof(m), s = new Float32Array(nn); let ph = 0;
+      for (let i = 0; i < nn; i++) { ph += f/SR; ph -= Math.floor(ph); s[i] = (race ? ((ph < 0.5 ? 1 : -1)*0.5 + (2*ph - 1)*0.5) : Math.sin(ph*6.283))*Math.min(1, i/40)*Math.exp(-i/SR/(race ? 0.08 : 0.25)); }
+      add(lp(s, race ? 2600 + 800*Math.sin(b) : 2400), t0 + k*BAR/steps, race ? 0.08 : 0.07, k % 2 ? 0.35 : -0.35);
+    }
+    if (race) {
+      for (let k = 0; k < 4; k++) { add(kick, t0 + k*BEAT, 0.85, 0); add(hatO, t0 + k*BEAT + BEAT/2, 0.12, 0.2); }
+      add(clap, t0 + BEAT, 0.42, 0); add(clap, t0 + 3*BEAT, 0.42, 0);
+      for (let k = 0; k < 16; k++) add(hatC, t0 + k*BEAT/4, k % 2 ? 0.09 : 0.05, -0.25);
+      for (let k = 0; k < 16; k++) {            // bajo en semicorcheas, el motor de la canción
+        const nn = Math.round(BEAT/4*SR*0.8), m = root + (k % 8 === 6 ? 12 : 0), s = lp(saw(mtof(m), nn, 0.003), 700);
+        for (let i = 0; i < nn; i++) s[i] = Math.tanh(1.6*s[i]*Math.min(1, i/150)*Math.exp(-i/SR/0.09));
+        add(s, t0 + k*BEAT/4, k % 4 === 0 ? 0.3 : 0.22, 0);
+      }
+    } else {
+      if (b % 2 === 0) add(kick, t0, 0.5, 0); add(kick, t0 + 2.5*BEAT, 0.35, 0);
+      add(clap, t0 + 2*BEAT, 0.18, 0);
+      for (let k = 0; k < 8; k++) add(hatC, t0 + k*BEAT/2 + (k % 2 ? BEAT*0.08 : 0), k % 2 ? 0.06 : 0.035, 0.25);
+      const nn = Math.round(BAR*SR*0.95), s = lp(saw(mtof(root), nn, 0.002), 400);
+      for (let i = 0; i < nn; i++) s[i] *= Math.min(1, i/400)*Math.exp(-i/SR/1.2)*0.6;
+      add(s, t0, 0.5, 0);
+    }
+  }
+  let pk = 0; for (let i = 0; i < N; i++) { L[i] = Math.tanh(L[i]*1.1); R[i] = Math.tanh(R[i]*1.1); pk = Math.max(pk, Math.abs(L[i]), Math.abs(R[i])); }
+  const g = 0.85/(pk || 1); for (let i = 0; i < N; i++) { L[i] *= g; R[i] *= g; }
+  return { SR, L, R };
+}
+const MUS = { bufs: {}, cur: null, kind: '', bus: null, gen: {} };
+function musBuffer(kind) {
+  if (MUS.bufs[kind]) return MUS.bufs[kind];
+  const s = synthLoop(kind), ac = AU.ac, buf = ac.createBuffer(2, s.L.length, s.SR);
+  buf.getChannelData(0).set(s.L); buf.getChannelData(1).set(s.R);
+  return (MUS.bufs[kind] = buf);
+}
+function musVolume() { return (SET.music === undefined ? 0.55 : SET.music)*0.42; }
+function musWanted() {
+  if (typeof introPhase !== 'undefined' && introPhase) return '';
+  if (state === 'menu') return 'menu';
+  if (state === 'countdown' || state === 'race' || state === 'finish') return panelOpen && state === 'finish' ? 'menu' : 'race';
+  return '';
+}
+function musicTick() {
+  if (!AU.ok || !AU.ac) return;
+  if (!MUS.bus) { MUS.bus = AU.ac.createGain(); MUS.bus.gain.value = musVolume(); MUS.bus.connect(AU.out); }
+  const want = musWanted();
+  if (MUS.kind === 'menu' && !MUS.gen.race) { MUS.gen.race = 1; setTimeout(() => { try { musBuffer('race'); } catch(e) {} }, 2500); }   // la de carrera se prepara mientras estás en el menú
+  if (want === MUS.kind) return;
+  // se genera de a una, sin trabar el cuadro en que se pide
+  if (want && !MUS.bufs[want]) { if (!MUS.gen[want]) { MUS.gen[want] = 1; setTimeout(() => { try { musBuffer(want); } catch(e) {} }, 30); } return; }
+  const ac = AU.ac, now = ac.currentTime;
+  if (MUS.cur) { const o = MUS.cur; o.g.gain.cancelScheduledValues(now); o.g.gain.setValueAtTime(o.g.gain.value, now); o.g.gain.linearRampToValueAtTime(0, now + 0.8); setTimeout(() => { try { o.src.stop(); } catch(e) {} }, 1000); MUS.cur = null; }
+  MUS.kind = want;
+  if (!want) return;
+  const src = ac.createBufferSource(); src.buffer = MUS.bufs[want]; src.loop = true;
+  const g = ac.createGain(); g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(1, now + 1.2);
+  src.connect(g); g.connect(MUS.bus); src.start(now + 0.02);
+  MUS.cur = { src, g };
+}
+// ---- locutor ----
+const VOICE = { last: 0, v: null, ready: false };
+function pickVoice() {
+  if (!window.speechSynthesis) return null;
+  const vs = speechSynthesis.getVoices(); if (!vs.length) return null;
+  const want = EN ? ['en-US', 'en-GB', 'en'] : ['es-AR', 'es-US', 'es-419', 'es-MX', 'es-ES', 'es'];
+  for (const w of want) { const v = vs.find(x => x.lang && x.lang.replace('_', '-').toLowerCase().indexOf(w.toLowerCase()) === 0); if (v) return v; }
+  return null;
+}
+try { if (window.speechSynthesis) speechSynthesis.onvoiceschanged = () => { VOICE.v = pickVoice(); }; } catch(e) {}
+function say(text, prio) {
+  if (SET.voice === false || AU.muted || !window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') return;
+  const now = performance.now(); if (!prio && now - VOICE.last < 1400) return;
+  try {
+    const t = tr(text).replace(/[^\p{L}\p{N}¡!¿?,.' ]/gu, '').trim(); if (!t) return;
+    if (prio) speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(t); VOICE.v = VOICE.v || pickVoice();
+    if (VOICE.v) u.voice = VOICE.v; u.lang = VOICE.v ? VOICE.v.lang : (EN ? 'en-US' : 'es-AR');
+    u.rate = 1.12; u.pitch = 0.85; u.volume = Math.min(1, SET.vol + 0.1);
+    speechSynthesis.speak(u); VOICE.last = now;
+  } catch(e) {}
+}
+const ORD_ES = ['', 'primero', 'segundo', 'tercero', 'cuarto', 'quinto', 'sexto', 'séptimo', 'octavo'];
+const ORD_EN = ['', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth'];
+// qué dice el locutor cuando aparece cada cartel
+function sayBanner(t, sub) {
+  let m;
+  if (t === 'ÚLTIMA VUELTA') say('¡Última vuelta!', true);
+  else if (t === '¡GANASTE!') say(EN ? 'You win!' : '¡Ganaste! ¡Primer puesto!', true);
+  else if (t === 'META' && (m = String(sub).match(/^(\d+)°/))) say(EN ? 'You finished ' + ORD_EN[+m[1]] : 'Terminaste ' + ORD_ES[+m[1]], true);
+  else if ((m = t.match(/¡(ORO|PLATA|BRONCE)!$/))) say(EN ? { ORO: 'Gold medal!', PLATA: 'Silver medal!', BRONCE: 'Bronze medal!' }[m[1]] : '¡Medalla de ' + m[1].toLowerCase() + '!', true);
+  else if (t.indexOf('NUEVO RÉCORD') >= 0) say('¡Nuevo récord!', true);
+  else if ((m = t.match(/AFUERA (.+)!$/))) say(EN ? m[1] + ' is out!' : '¡Afuera ' + m[1] + '!', true);
+  else if (t === '¡SOBREVIVISTE!') say(EN ? 'You survived!' : '¡Sobreviviste!', true);
+  else if (t === '☠ ELIMINADO' || t === 'ELIMINADO') say(EN ? 'Eliminated!' : '¡Eliminado!', true);
+  else if ((m = t.match(/PUNTO PARA J([12])/))) say(EN ? 'Point to player ' + m[1] : 'Punto para jugador ' + (m[1] === '1' ? 'uno' : 'dos'), true);
+  else if ((m = t.match(/GANÓ J([12])/))) say(EN ? 'Player ' + m[1] + ' wins!' : '¡Ganó el jugador ' + (m[1] === '1' ? 'uno' : 'dos') + '!', true);
+  else if ((m = t.match(/LE GANASTE A (.+)!$/))) say(EN ? 'You beat ' + m[1] + '!' : '¡Le ganaste a ' + m[1] + '!', true);
+  else if (eventMode && EVT_MODS.some(x => t.indexOf(x.name) >= 0)) say(t.replace(/^\S+ /, ''), true);
+}
+function sayPopup(t) {
+  let m;
+  if (t === '¡SALIDA PERFECTA!') say('¡Salida perfecta!', true);
+  else if (t.indexOf('¡RÉCORD DE VUELTA!') === 0) say('¡Récord de vuelta!');
+  else if (t === '▲ P1' && state === 'race') say(EN ? 'You take the lead!' : '¡Tomaste la punta!');
+  else if ((m = t.match(/COMBO ×(\d)/))) say(EN ? 'Combo times ' + m[1] + '!' : '¡Combo por ' + m[1] + '!');
+}
+
+/* =====================================================================
    TUTORIAL de la primera carrera
    ===================================================================== */
 let tut = null;
@@ -5967,7 +6110,7 @@ function frame(now) {
   const raw = Math.max(0, (now - last)/1000); let dt = Math.min(ECO ? 0.05 : 0.033, raw); last = Math.max(last, now);
   if (tut && !paused) dt *= tutTick(dt);
   if (slowT > 0 && !paused) { slowT -= raw; dt *= 0.32; }   // cámara lenta al cruzar la meta
-  try { if (introPhase) introTick(dt); if (!paused) { update(dt); if (ttMode) ttTick(); } render(); }
+  try { if (introPhase) introTick(dt); if (!paused) { update(dt); if (ttMode) ttTick(); } render(); try { musicTick(); } catch(e) {} }
   catch (e) { errCount++; lastErr = String(e && e.message || e); lastErrT = performance.now(); if (errCount < 5) console.error(e); try { ctx.restore(); ctx.restore(); } catch(_) {} }
   syncMenu(dt); syncRes(dt);
   showErr();
