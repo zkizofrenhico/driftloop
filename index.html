@@ -716,7 +716,7 @@ function drawAmbient(R) {
    ===================================================================== */
 var NATIVE = (function () { try { return !!(window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform()); } catch(e) { return false; } })();
 function NP(name) { try { return NATIVE && Capacitor.Plugins ? Capacitor.Plugins[name] || null : null; } catch(e) { return null; } }
-function vibrate(ms) {
+function vibrate(ms) { if (CALIB) return;
   const H = NP('Haptics');
   if (H) { (ms > 55 ? H.impact({ style: 'HEAVY' }) : H.vibrate({ duration: Math.round(ms) })).catch(() => {}); return; }
   try { navigator.vibrate && navigator.vibrate(ms); } catch(e) {}
@@ -6160,7 +6160,8 @@ function musicTick() {
 }
 // ---- locutor ----
 // solo habla en una carrera de verdad: nunca con el menú abierto, en la demo de fondo, la intro o la repetición
-function sayOK() { return !replayOn && !menuShown && !(typeof introPhase !== 'undefined' && introPhase) && (state === 'countdown' || state === 'race' || state === 'finish'); }
+var CALIB = false;
+function sayOK() { return !CALIB && !replayOn && !menuShown && !(typeof introPhase !== 'undefined' && introPhase) && (state === 'countdown' || state === 'race' || state === 'finish'); }
 const VOICE = { last: 0, v: null, ready: false };
 // voces de mujer / de hombre según el nombre (Samsung: SMTf/SMTm; Google: esc/esf/sfb mujer, esd hombre; Windows/Apple: nombres propios)
 const V_F = /smtf|female|mujer|femen|woman|-esc-|-esf-|-sfb-|-tpc-|-tpf-|-sfg-|-iob-|paulina|m[oó]nica|sabina|helena|laura|elvira|dalia|elena|camila|luc[ií]a|paloma|marisol|ang[eé]lica|isabela|valeria|samantha|zira|aria|jenny|karen|moira|tessa|victoria|susan|siri.*fem/i;
@@ -6779,6 +6780,7 @@ try { if (!introSeen() && localStorage.getItem('driftloop_champgo') !== '1') sho
 (function calibrateDaily() {
   if (TRACK_KEY !== 'diaria' || !DAILY || DAILY.cal) return;
   const sv = { model: prof.model, upg: Object.assign({}, prof.upg), wx: WX_KEY, riv: C.rivales, pos: C.posicionLargada, kh: keyHeld, st: player.st };
+  CALIB = true;
   try {
     prof.model = 'gt'; for (const k in prof.upg) prof.upg[k] = 0; applyWeather('dia');
     C.rivales = 0; C.posicionLargada = 1; resetRace(); LAPS = 3; startCountdown(); countdown = 0.3; let best = 0, prev = -1;
@@ -6791,6 +6793,7 @@ try { if (!introSeen() && localStorage.getItem('driftloop_champgo') !== '1') sho
     if (best > 5) { DAILY.medals = [+(best*1.04).toFixed(2), +(best*0.985).toFixed(2), +(best*0.93).toFixed(2)]; DAILY.cal = true; TT_MEDALS.diaria = DAILY.medals;
       try { localStorage.setItem('driftloop_daily_trk', JSON.stringify(DAILY)); } catch(e) {} }
   } catch(e) {}
+  CALIB = false;
   prof.model = sv.model; Object.assign(prof.upg, sv.upg); applyWeather(sv.wx); C.rivales = sv.riv; C.posicionLargada = sv.pos; keyHeld = sv.kh;
   parts.length = 0; skN = 0; skHead = 0; popups.length = 0; banners.length = 0; applySettings();
   state = 'menu'; stateT = 0; resetRace();
