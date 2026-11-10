@@ -175,7 +175,9 @@ const I18N_EN = {
   'Copialo y guardalo (en tus notas o mandátelo por WhatsApp). Con este código recuperás toda tu partida en cualquier celular.': 'Copy it and keep it (in your notes or send it to yourself on WhatsApp). This code restores your whole save on any phone.',
   'Pegá acá tu código de respaldo. Se reemplaza la partida actual.': 'Paste your backup code here. It replaces the current save.',
   'Ese código no es válido. Revisá que esté completo.': "That code isn't valid. Check that it's complete.",
-  'última carrera': 'last race', '📲 WHATSAPP': '📲 WHATSAPP', 'LIGAS': 'LEAGUES', '👥 LIGAS': '👥 LEAGUES', 'Tu nombre': 'Your name', '➕ CREAR UNA LIGA': '➕ CREATE A LEAGUE', '➕ CREAR OTRA LIGA': '➕ CREATE ANOTHER LEAGUE',
+  'última carrera': 'last race', '🎬 REPETICIÓN': '🎬 REPLAY', '📲 GUARDAR CLIP': '📲 SAVE CLIP', 'REPETICIÓN': 'REPLAY', 'META': 'FINISH', 'GRABANDO': 'REC', 'TOCÁ PARA SALIR': 'TAP TO EXIT',
+  '🎬 TU CLIP': '🎬 YOUR CLIP', '📲 COMPARTIR': '📲 SHARE', '💾 GUARDAR': '💾 SAVE', 'Tu navegador no puede grabar video': "Your browser can't record video",
+  'No se pudo compartir desde acá. Probá desde zkizofrenhico.github.io/driftloop': "Couldn't share from here. Try at zkizofrenhico.github.io/driftloop", '📲 WHATSAPP': '📲 WHATSAPP', 'LIGAS': 'LEAGUES', '👥 LIGAS': '👥 LEAGUES', 'Tu nombre': 'Your name', '➕ CREAR UNA LIGA': '➕ CREATE A LEAGUE', '➕ CREAR OTRA LIGA': '➕ CREATE ANOTHER LEAGUE',
   'CÓDIGO': 'CODE', 'UNIRME ▶': 'JOIN ▶', 'CREANDO…': 'CREATING…', 'CÓDIGO DE LA LIGA': 'LEAGUE CODE', '📲 INVITAR': '📲 INVITE', 'Cargando tiempos…': 'Loading times…', 'sin tu tiempo': 'no time yet',
   'Armá una liga con tus amigos: cada uno sube su mejor vuelta de contrarreloj en cada circuito y ven quién es el más rápido. Tocando un tiempo corrés contra el fantasma de esa vuelta.': 'Start a league with your friends: everyone uploads their best time-trial lap on each track and you see who is fastest. Tap a time to race the ghost of that lap.',
   'Todavía nadie subió tiempos. Corré una contrarreloj: tus récords se suben solos.': 'No times yet. Run a time trial: your records upload automatically.',
@@ -2057,6 +2059,7 @@ function press() {
 }
 cv.addEventListener('pointerdown', e => {
   e.preventDefault(); const r = cv.getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  if (replayOn) { if (!(RP.rec && RP.rec.state === 'recording')) endReplay(); return; }
   if (Math.hypot(x - MUTE_BTN.x, y - MUTE_BTN.y) < MUTE_BTN.r + 10) { initAudio(); if (state === 'race' || state === 'countdown') openPause(false); else if (state === 'menu') openPause(true); else setMute(!AU.muted); return; }
   const rb = revBtn();
   if (state === 'race' && !duoMode && Math.hypot(x - rb.x, y - rb.y) < rb.r + 10) { initAudio(); revPointers.add(e.pointerId); try { cv.setPointerCapture(e.pointerId); } catch(_) {} return; }
@@ -2502,6 +2505,7 @@ resetRace();
 
 function update(dt) {
   stateT += dt; animT += dt; lastDt = dt;
+  if (replayOn) { replayTick(dt); return; }
   const held = isHeld(), held2 = duoMode && isHeld2();
   updateDynWeather(dt);
   if (WX.wet) {
@@ -2601,6 +2605,7 @@ function update(dt) {
   if (state === 'race' && !player.onGrass && Math.abs(player.d) > HALF_W - 4 && player.v > 150 && Math.abs(sample(mod(player.dist), tA).k) > 1/700) shake = Math.max(shake, 1.2*C.vibracionCamara);
   shake *= Math.exp(-7*dt); if (shake < 0.05) shake = 0;
   try { audioUpdate(dt, held); } catch(e) {}
+  rpRecord();
 }
 
 /* =====================================================================
@@ -2924,7 +2929,7 @@ function panel(x, y, w, h, accent) {
 }
 
 function drawTags() {
-  if (!viewM || state === 'menu' || !SET.names) return;
+  if (!viewM || state === 'menu' || !SET.names || replayOn) return;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.font = `${FW} 11px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const c of cars) {
@@ -3176,6 +3181,7 @@ function throwConfetti(gold) {
 
 function drawHUD() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (replayOn) { drawReplayHUD(); return; }
   if (resShown) return;
   if (state !== 'menu' && duoMode) { drawDuoHUD(); drawLights(); }
   else if (state !== 'menu') {
@@ -3887,6 +3893,8 @@ function heroLoop(now) {
    RESULTADOS (podio + clasificación + premio)
    ===================================================================== */
 const RCSS = `
+#res .rpb{display:flex;gap:8px;margin:10px 12px 0}
+#res .rpb button{flex:1;height:40px;border-radius:8px;font-size:16px;font-weight:800;font-style:italic;color:#fff;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2)}
 #res{position:fixed;top:0;height:100%;display:none;flex-direction:column;z-index:9;overflow-x:hidden;overflow-y:auto;touch-action:pan-y;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;color:#fff;
   font-family:"Barlow Condensed","Arial Narrow",sans-serif;-webkit-user-select:none;user-select:none;
   background:radial-gradient(120% 70% at 50% 30%,rgba(26,30,40,.9),rgba(4,5,8,.97))}
@@ -3983,12 +3991,14 @@ function resRender() {
     ${(player.awards || []).length ? `<div class="aw${a(0.36)}">` + player.awards.map(g => `<div><b>${g.ico} ${g.kind}</b> ${g.txt}<i>+${fmtMoney(g.pay)}</i></div>`).join('') + '</div>' : ''}
     ${player.champInfo ? `<div class="cp${a(0.38)}"><b>COPA ${CUPS[player.champInfo.cup].name}</b> +${player.champInfo.pts} pts · ${player.champInfo.last ? 'última carrera' : 'carrera ' + (player.champInfo.round + 1) + ' de ' + CHAMP.length}
        <span>${(player.champInfo.final ? player.champInfo.final.standings : champStandings()).slice(0, 3).map((e, i) => (i + 1) + '° ' + (e.name === 'VOS' ? 'VOS' : e.name) + ' ' + e.pts).join(' · ')}</span></div>` : ''}
+    ${rpAvailable() ? `<div class="rpb${a(0.38)}"><button data-a="rp">🎬 REPETICIÓN</button><button data-a="clip">📲 GUARDAR CLIP</button></div>` : ''}
     <div class="bt${a(0.4)}">${player.champInfo
       ? (player.champInfo.last ? '<button class="go gold" data-a="final">VER RESULTADO 🏆</button>' : '<button class="go" data-a="next">SIGUIENTE ▶</button>') + '<button class="s" data-a="menu">MENÚ</button>'
       : '<button class="go" data-a="again">REVANCHA ▶</button><button class="s" data-a="gar">GARAJE</button><button class="s" data-a="menu">MENÚ</button>'}</div>`;
   resPodium();
   rEl.querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
     initAudio(); const act = b.dataset.a;
+    if (act === 'rp' || act === 'clip') { startReplay(act === 'clip'); return; }
     hideRes();
     if (act === 'again') { resetRace(); startCountdown(); }
     else if (act === 'gar') openGarage();
@@ -4003,7 +4013,7 @@ function resRender() {
 }
 function hideRes() { resShown = false; rEl.style.display = 'none'; }
 function syncRes(dt) {
-  const want = state === 'finish' && resultsReady && stateT > 2.4 && !garageOpen && !paused && !ttMode && !elimMode;
+  const want = state === 'finish' && resultsReady && stateT > 2.4 && !garageOpen && !paused && !ttMode && !elimMode && !duoMode && !replayOn;
   if (want && !resShown) { resShown = true; rEl.style.left = Math.round((innerWidth - W)/2) + 'px'; rEl.style.width = W + 'px'; rEl.style.display = 'flex'; resRender(); }
   else if (!want && resShown && state !== 'finish') hideRes();
   if (resShown) { resRefresh += dt; if (resRefresh > 1) { resRefresh = 0; resPodium(); } }
@@ -5219,6 +5229,138 @@ function openDuoResults() {
 #xp .duosc b{display:block;font-size:84px;line-height:1}
 #xp .duosc i{font-size:50px;color:#5c6470}
 #menu .modes button.on.duo{background:linear-gradient(180deg,#1d4f9a,#0b2550);border-color:#4aa8ff}`; document.head.appendChild(st); })();
+
+/* =====================================================================
+   REPETICIÓN con cámaras de TV + clip de video para compartir
+   Se graban los últimos segundos de cada carrera (30 cuadros por segundo).
+   ===================================================================== */
+var replayOn = false;
+const RP = { buf: [], keep: 11, rp: null, rec: null, chunks: [], recMime: '' };
+function rpRecord() {
+  if (!(state === 'race' || state === 'finish') || replayOn || duoMode) return;
+  if (player.finished && raceTime > player.finishTime + 1.6) return;   // después de la meta ya no hace falta
+  const b = RP.buf, t = raceTime;
+  if (b.length && t - b[b.length - 1].t < 1/30) return;
+  if (b.length && t < b[b.length - 1].t) b.length = 0;            // carrera nueva
+  const f = new Float32Array(cars.length*4);
+  cars.forEach((c, i) => { f[i*4] = c.wx; f[i*4 + 1] = c.wy; f[i*4 + 2] = c.va; f[i*4 + 3] = (Math.abs(c.slip || 0) > 0.22 && c.v > 60 ? 1 : 0) + (c.throttle ? 2 : 0); });
+  b.push({ t, f, n: cars.length });
+  while (b.length > 2 && b[b.length - 1].t - b[0].t > RP.keep) b.shift();
+}
+function rpAvailable() { return RP.buf.length > 60 && player && player.finished; }
+function startReplay(withClip) {
+  if (!rpAvailable()) return;
+  const b = RP.buf, fin = player.finishTime || b[b.length - 1].t;
+  const t1 = Math.min(b[b.length - 1].t, fin + 1.4), t0 = Math.max(b[0].t, t1 - 8.5);
+  replayOn = true; hideRes(); parts.length = 0; popups.length = 0; banners.length = 0;
+  RP.rp = { t0, t1, t: t0, fin, shot: -1, shotT: 0, fix: null, end: false };
+  rpNextShot();
+  if (withClip) rpStartClip();
+}
+function endReplay() {
+  if (!replayOn) return;
+  replayOn = false; RP.rp = null;
+  if (RP.rec && RP.rec.state === 'recording') RP.rec.stop();
+  // los autos vuelven a donde estaban de verdad
+  for (const c of cars) syncView(c);
+  stateT = Math.max(stateT, 3);
+}
+function rpFrameAt(t) {
+  const b = RP.buf; let lo = 0, hi = b.length - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (b[m].t <= t) lo = m; else hi = m; }
+  const A = b[lo], B = b[hi], k = B.t > A.t ? Math.max(0, Math.min(1, (t - A.t)/(B.t - A.t))) : 0;
+  return { A, B, k };
+}
+function rpApply(t) {
+  const { A, B, k } = rpFrameAt(t);
+  cars.forEach((c, i) => {
+    if (i >= A.n) return;
+    const a = A.f, bb = B.f;
+    c.wx = a[i*4] + (bb[i*4] - a[i*4])*k; c.wy = a[i*4 + 1] + (bb[i*4 + 1] - a[i*4 + 1])*k;
+    c.va = a[i*4 + 2] + angDiff(bb[i*4 + 2], a[i*4 + 2])*k;
+    const fl = a[i*4 + 3]; c.throttle = fl >= 2;
+    if (fl % 2 === 1 && Math.random() < 0.7) {           // humo del derrape
+      const L = LAYOUT[c.model] || LAYOUT.gt, cx = Math.cos(c.va), sy = Math.sin(c.va);
+      for (const s of [-1, 1]) part(c.wx + cx*L.tail - sy*L.hw*s, c.wy + sy*L.tail + cx*L.hw*s, rand(-20, 20), rand(-20, 20), rand(0.6, 1.1), rand(7, 12), smokeColFor(c), 1);
+    }
+  });
+}
+function rpNextShot() {
+  const r = RP.rp; r.shot = (r.shot + 1) % 3; r.shotT = 0;
+  if (r.shot === 1) {          // cámara fija al costado de la pista, por donde va a pasar el auto
+    const fut = rpFrameAt(Math.min(r.t1, r.t + 1.3)), i = cars.indexOf(player), f = fut.A.f;
+    const x = f[i*4], y = f[i*4 + 1], a = f[i*4 + 2];
+    r.fix = { x: x - Math.sin(a)*70, y: y + Math.cos(a)*70, ang: a + 0.6 };
+  }
+}
+function replayTick(dt) {
+  const r = RP.rp; if (!r) return;
+  const slow = Math.abs(r.t - r.fin) < 0.9 ? 0.3 : 1;          // cámara lenta al cruzar la meta
+  r.t += dt*slow; r.shotT += dt*slow;
+  if (r.t >= r.t1) { if (!r.end) { r.end = true; endReplay(); } return; }
+  if (r.shotT > (r.shot === 1 ? 2.2 : 2.8) && Math.abs(r.t - r.fin) > 0.9) rpNextShot();
+  rpApply(r.t);
+  for (let i = parts.length - 1; i >= 0; i--) { const p = parts[i]; p.life -= dt; if (p.life <= 0) { parts.splice(i, 1); continue; } p.x += p.vx*dt; p.y += p.vy*dt; p.vx *= 0.94; p.vy *= 0.94; if (p.grow) p.size += dt*14; }
+  // cámaras
+  const base = W/430; cam.ax = 0.5; cam.ay = 0.55; cam.ao = 0; cam.zm = 1;
+  if (r.shot === 0) { cam.x = player.wx; cam.y = player.wy; cam.ang += angDiff(player.va, cam.ang)*Math.min(1, dt*4); cam.zoom = base*1.25; }
+  else if (r.shot === 1 && r.fix) { cam.x = r.fix.x + (player.wx - r.fix.x)*0.35; cam.y = r.fix.y + (player.wy - r.fix.y)*0.35; cam.ang = r.fix.ang; cam.zoom = base*1.7; }
+  else { cam.x = player.wx; cam.y = player.wy; cam.ang += dt*0.25; cam.zoom = base*0.62; }
+  if (Math.abs(r.t - r.fin) < 0.9) { cam.zoom = base*1.45; cam.x = player.wx; cam.y = player.wy; }
+}
+function drawReplayHUD() {
+  const r = RP.rp; if (!r) return;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const bh = Math.round(H*0.07); ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, bh); ctx.fillRect(0, H - bh, W, bh);
+  para(12, bh + 10, 132, 28, 5, 'rgba(200,20,26,.92)');
+  if (Math.sin(animT*6) > 0) { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(28, bh + 24, 5, 0, 7); ctx.fill(); }
+  txt('REPETICIÓN', 40, bh + 30, 17, '#fff', 'left', false, 'italic 800');
+  txt(TRK.name.toUpperCase(), W - 14, bh + 30, 14, '#fff', 'right', true, '700');
+  if (Math.abs(r.t - r.fin) < 0.9) txt('META', W/2, H*0.3, 46, '#ffd23f', 'center', true, 'italic 800');
+  txt('DRIFT LOOP', W/2, H - bh/2 + 6, 16, '#e1251b', 'center', false, 'italic 800');
+  if (RP.rec && RP.rec.state === 'recording') { ctx.fillStyle = '#ff3b2a'; ctx.beginPath(); ctx.arc(W - 24, bh/2, 6, 0, 7); ctx.fill(); txt('GRABANDO', W - 36, bh/2 + 5, 13, '#fff', 'right', false, '800'); }
+  else txt('TOCÁ PARA SALIR', W - 14, bh/2 + 5, 12, '#9aa3ad', 'right', false, '700');
+}
+// ---- clip de video (MediaRecorder sobre el canvas) ----
+function rpMime() {
+  if (typeof MediaRecorder === 'undefined') return '';
+  for (const m of ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']) if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) return m;
+  return '';
+}
+function rpStartClip() {
+  const mime = rpMime();
+  if (!mime || !cv.captureStream) { popup('Tu navegador no puede grabar video', '#ff8a7a', true); return; }
+  try {
+    const stream = cv.captureStream(30);
+    RP.chunks = []; RP.recMime = mime;
+    RP.rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 5000000 });
+    RP.rec.ondataavailable = e => { if (e.data && e.data.size) RP.chunks.push(e.data); };
+    RP.rec.onstop = rpClipReady;
+    RP.rec.start(250);
+  } catch(e) { RP.rec = null; }
+}
+let rpClip = null;
+function rpClipReady() {
+  const type = RP.recMime.split(';')[0], ext = type === 'video/mp4' ? 'mp4' : 'webm';
+  const blob = new Blob(RP.chunks, { type }); RP.rec = null; RP.chunks = [];
+  if (blob.size < 2000) return;
+  rpClip = { blob, file: new File([blob], `driftloop-${TRACK_KEY}.${ext}`, { type }), url: URL.createObjectURL(blob) };
+  openClipPanel();
+}
+function openClipPanel() {
+  if (!rpClip) return;
+  const canShare = navigator.canShare && navigator.canShare({ files: [rpClip.file] });
+  bkEl.innerHTML = `<div class="box"><h3>🎬 TU CLIP</h3>
+    <video src="${rpClip.url}" autoplay loop muted playsinline style="width:100%;max-height:52vh;border-radius:8px;background:#000"></video><div class="msg"></div>
+    <div class="row"><button data-b="close">CERRAR</button>${canShare ? '<button class="go" data-b="share">📲 COMPARTIR</button>' : `<a class="wa" href="${rpClip.url}" download="${rpClip.file.name}">💾 GUARDAR</a>`}</div></div>`;
+  bkEl.style.display = 'flex';
+  const msg = bkEl.querySelector('.msg');
+  bkEl.querySelectorAll('[data-b]').forEach(b => b.onclick = () => {
+    if (b.dataset.b === 'close') { bkEl.style.display = 'none'; return; }
+    navigator.share({ files: [rpClip.file], text: EN ? 'Look at this lap in Drift Loop 🏁 https://zkizofrenhico.github.io/driftloop/' : 'Mirá esta vuelta en Drift Loop 🏁 https://zkizofrenhico.github.io/driftloop/' })
+      .catch(err => { if (err && err.name !== 'AbortError') { msg.style.color = '#ffd23f'; msg.textContent = 'No se pudo compartir desde acá. Probá desde zkizofrenhico.github.io/driftloop'; } });
+  });
+}
 
 /* =====================================================================
    TUTORIAL de la primera carrera
