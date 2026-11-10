@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Drift Loop</string>
+    <string name="title_activity_main">Drift Loop</string>
+    <string name="package_name">com.agustincarreras.driftloop</string>
+    <string name="custom_url_scheme">com.agustincarreras.driftloop</string>
+</resources>

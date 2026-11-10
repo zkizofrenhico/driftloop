@@ -1,0 +1,18 @@
+{
+  "appId": "com.agustincarreras.driftloop",
+  "appName": "Drift Loop",
+  "webDir": "www",
+  "backgroundColor": "#07090d",
+  "android": {
+    "backgroundColor": "#07090d",
+    "allowMixedContent": false,
+    "captureInput": true,
+    "webContentsDebuggingEnabled": false
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_driftloop",
+      "iconColor": "#E1251B"
+    }
+  }
+}
