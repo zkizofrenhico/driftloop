@@ -2162,7 +2162,7 @@ function part(x, y, vx, vy, life, size, col, grow) {
   if (parts.length > (MAXQ ? 900 : 360)) parts.shift();
   parts.push({ x, y, vx, vy, life, max: life, size, col, grow });
 }
-function popup(txt, col, big) { popups.push({ txt, col, big: !!big, t: 0 }); if (popups.length > 4) popups.shift(); if (!replayOn) try { sayPopup(txt); } catch(e) {} }
+function popup(txt, col, big) { popups.push({ txt, col, big: !!big, t: 0 }); if (popups.length > 4) popups.shift(); if (sayOK()) try { sayPopup(txt); } catch(e) {} }
 function nearCam(x, y, r) { return Math.abs(x - cam.x) < r && Math.abs(y - cam.y) < r; }
 
 function damageCar(c, power, wx, wy) {
@@ -3340,7 +3340,7 @@ function drawRaceHUD() {
 }
 /* ---------- carteles grandes (última vuelta, meta) y confeti ---------- */
 const banners = [], confetti = [];
-function banner(t, sub, col, checker) { banners.push({ t, sub, col, checker: !!checker, a: 0 }); try { sayBanner(t, sub); } catch(e) {} }
+function banner(t, sub, col, checker) { banners.push({ t, sub, col, checker: !!checker, a: 0 }); if (sayOK()) try { sayBanner(t, sub); } catch(e) {} }
 function drawBanners() {
   const dt = Math.min(0.05, lastDt || 0.016);
   for (let i = banners.length - 1; i >= 0; i--) {
@@ -6026,6 +6026,8 @@ function musicTick() {
   MUS.cur = { src, g };
 }
 // ---- locutor ----
+// solo habla en una carrera de verdad: nunca con el menú abierto, en la demo de fondo, la intro o la repetición
+function sayOK() { return !replayOn && !menuShown && !(typeof introPhase !== 'undefined' && introPhase) && (state === 'countdown' || state === 'race' || state === 'finish'); }
 const VOICE = { last: 0, v: null, ready: false };
 function pickVoice() {
   if (!window.speechSynthesis) return null;
