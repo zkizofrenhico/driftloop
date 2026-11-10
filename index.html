@@ -2028,6 +2028,22 @@ const CAR_L = 40, CAR_W = 21;
 // Colores de equipo inspirados en libreas clásicas
 const RIVAL_COLORS = [['#8fc3e3','#f47b20'],['#f1f1ec','#1d4f91'],['#14452f','#e6d3a3'],['#f2c200','#141414'],['#121316','#c9a227'],
   ['#b7bcc4','#1d4f91'],['#0b3d91','#f1f1ec'],['#5b2a86','#f7d117'],['#e65100','#1c1c1c'],['#00796b','#f1f1ec'],['#4a4f57','#ff7a00']];
+// ningún rival con un color parecido al tuyo: si choca, se le da el color libre más distinto
+const EXTRA_COLORS = [['#c8102e','#f1f1ec'],['#2e7d32','#f2c200'],['#1565c0','#ffffff'],['#ff4fa3','#141414'],['#7fdc3a','#141414'],['#ffffff','#e1251b'],['#6d4c41','#ffb347']];
+function colDist(a, b) {
+  const p = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  try { const A = p(a), B = p(b), rm = (A[0] + B[0])/2, dr = A[0] - B[0], dg = A[1] - B[1], db = A[2] - B[2];
+        return Math.sqrt((2 + rm/256)*dr*dr + 4*dg*dg + (2 + (255 - rm)/256)*db*db); } catch(e) { return 999; }
+}
+function fixRivalColors() {
+  const mine = prof.col, NEAR = 185, used = cars.filter(c => !c.isPlayer).map(c => c.col);
+  for (const c of cars) {
+    if (c.isPlayer || c.isP2 || colDist(c.col, mine) >= NEAR) continue;
+    const pool = RIVAL_COLORS.concat(EXTRA_COLORS).filter(p => colDist(p[0], mine) >= NEAR && !used.some(u => colDist(u, p[0]) < 60));
+    const pick = (pool.length ? pool : RIVAL_COLORS.concat(EXTRA_COLORS)).slice().sort((x, y) => colDist(y[0], mine) - colDist(x[0], mine))[pool.length ? (Math.random()*Math.min(3, pool.length))|0 : 0];
+    used.push(pick[0]); c.col = pick[0]; c.acc = pick[1]; c.spr = null;
+  }
+}
 const NAMES = ['Toto','Mati','Lula','Fede','Nico','Caro','Juli','Pipo','Sofi','Rama','Vale'];
 
 function rand(a, b) { return a + Math.random()*(b-a); }
@@ -2085,6 +2101,7 @@ function resetRace() {
   p2 = null; if (duoMode) duoSetup();
   if (eventMode) eventApplyMods();
   cam.x = player.wx; cam.y = player.wy; cam.ang = sample(0, tA).ang;
+  fixRivalColors();
   updateRanking();
 }
 
@@ -4241,6 +4258,7 @@ function resetChampRace() {
   skN = 0; skHead = 0; parts.length = 0; popups.length = 0;
   for (const c of cars) placeCar(c);
   cam.x = player.wx; cam.y = player.wy; cam.ang = sample(0, tA).ang;
+  fixRivalColors();
   updateRanking();
 }
 function champGo() {      // ir a la fecha que toca (recarga si el circuito es otro)
@@ -5286,7 +5304,8 @@ function endDuo() { if (!duoMode) return; duoMode = false; duo = null; p2 = null
 // la arma resetRace cuando duoMode está activo: el segundo auto es de J2, con el mismo auto y mejoras que J1
 function duoSetup() {
   p2 = cars.find(c => !c.isPlayer); if (!p2) return;
-  p2.isP2 = true; p2.name = 'J2'; p2.col = DUO_COL[1]; p2.acc = '#ffffff'; p2.stripe = prof.stripe;
+  DUO_COL[0] = prof.col; DUO_COL[1] = ['#2a8cff', '#e1251b', '#f2c200', '#3aa35b', '#ff4fa3'].sort((a, b) => colDist(b, prof.col) - colDist(a, prof.col))[0];
+  p2.isP2 = true; p2.name = 'J2'; p2.col = DUO_COL[1]; p2.acc = '#ffffff'; p2.spr = null; p2.stripe = prof.stripe;
   applyModel(p2, prof.model, playerStats()); p2.skill = p2.skillNow = 1.2; p2.mistakeP = 0; p2.pref = 0; p2.aggr = 0;
   player.dist = p2.dist = -40; player.d = player.laneT = -30; p2.d = p2.laneT = 30;
   placeCar(player); placeCar(p2);
