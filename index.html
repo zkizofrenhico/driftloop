@@ -1878,14 +1878,16 @@ function rivalRPM(v) { const vr = v/C.velocidadMaxima; let g = 0; while (g < GEA
 function audioUpdate(dt, held) {
   if (!AU.ok) return;
   const t = AU.ac.currentTime, p = player, vr = Math.max(0, p.v || 0)/C.velocidadMaxima;
-  const racing = state === 'race' || state === 'finish';
+  // terminada la carrera (resultados o repetición) el motor baja a ralentí y se apaga de a poco
+  const done = (state === 'finish' && stateT > 2.2) || replayOn;
+  const racing = (state === 'race' || state === 'finish') && !done;
   const thr = (state === 'race' && (held || p.reverse)) || (state === 'finish' && p.throttle);
 
   let target;
   if (state === 'countdown') {
     target = held ? 7000 - (Math.sin(animT*36) > 0.5 ? 650 : 0) : 1000;
     ENG.load += ((held ? 1 : 0) - ENG.load)*Math.min(1, dt*10);
-  } else if (!racing) { target = 950; ENG.load += (0 - ENG.load)*Math.min(1, dt*6); }
+  } else if (!racing) { target = done ? 800 : 950; ENG.load += (0 - ENG.load)*Math.min(1, dt*6); }
   else if (p.stallT > 0) { target = 6900 - (Math.sin(animT*30) > 0.4 ? 900 : 0); ENG.load += (1 - ENG.load)*Math.min(1, dt*10); }
   else if (p.reverse) { target = 1400 + vr*30000; ENG.gear = 0; ENG.load += (1 - ENG.load)*Math.min(1, dt*8); }
   else {
@@ -1901,7 +1903,8 @@ function audioUpdate(dt, held) {
     ENG.load += (ld - ENG.load)*Math.min(1, dt*(ld ? 9 : 12));
   }
   ENG.rpm += (target - ENG.rpm)*Math.min(1, dt*(ENG.shiftT > 0 ? 28 : 12));
-  AU.eng.set(ENG.rpm, ENG.load, state === 'menu' ? 0.35 : 0.75, t);
+  ENG.vol = done ? Math.max(0, (ENG.vol === undefined ? 0.75 : ENG.vol) - dt*0.5) : state === 'menu' ? 0.35 : 0.75;
+  AU.eng.set(ENG.rpm, ENG.load, ENG.vol, t);
 
   if (ENG.prevLoad > 0.6 && ENG.load < 0.3 && ENG.rpm > 4800) ENG.popT = 0.6;
   ENG.prevLoad = ENG.load;
@@ -2646,7 +2649,7 @@ resetRace();
 
 function update(dt) {
   stateT += dt; animT += dt; lastDt = dt;
-  if (replayOn) { replayTick(dt); return; }
+  if (replayOn) { replayTick(dt); try { audioUpdate(dt, false); } catch(e) {} return; }
   const held = isHeld(), held2 = duoMode && isHeld2();
   updateDynWeather(dt);
   if (WX.wet) {
