@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Drift Loop · Iniciar sesión</title>
+<style>
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0d1117;color:#fff;font:16px system-ui,sans-serif;text-align:center}
+.b{max-width:340px;padding:24px}
+h1{font-style:italic;font-size:28px;margin:0 0 6px}h1 span{color:#ff7a00}
+p{color:#c9d1d9;line-height:1.4}#g{display:flex;justify-content:center;min-height:44px;margin:18px 0}
+#m{min-height:22px;font-weight:700}a{color:#5fd8ff}
+</style></head><body><div class="b">
+<h1>DRIFT <span>LOOP</span></h1>
+<p id="t">Entrá con tu cuenta de Google para guardar tu partida en la nube.</p>
+<div id="g"></div><div id="m"></div>
+</div>
+<script>
+const KEY = 'AIzaSyCqQ0zHP7pxc1TjyMLoXrC0XNG9Nx00aVk', CLIENT = '880489407682-53mqjekftvu4brc7k2ecn6ig13579mim.apps.googleusercontent.com';
+const q = new URLSearchParams(location.search), EN = q.get('lang') === 'en', link = q.get('link') || '';
+const m = document.getElementById('m');
+if (EN) { document.documentElement.lang = 'en'; document.getElementById('t').textContent = 'Sign in with your Google account to save your progress in the cloud.'; }
+function say(t, c) { m.style.color = c || '#ffd23f'; m.textContent = t; }
+async function idp(cred, linkTok) {
+  const body = { postBody: 'id_token=' + cred + '&providerId=google.com', requestUri: location.origin + location.pathname, returnSecureToken: true, returnIdpCredential: true };
+  if (linkTok) body.idToken = linkTok;
+  const r = await fetch('https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=' + KEY, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  return r.json();
+}
+async function done(res) {
+  say(EN ? 'Connecting…' : 'Conectando…');
+  try {
+    let j = await idp(res.credential, link);
+    if (!j.refreshToken) j = await idp(res.credential, '');
+    if (!j.refreshToken) throw 0;
+    const h = 'rt=' + encodeURIComponent(j.refreshToken) + '&uid=' + encodeURIComponent(j.localId) + '&e=' + encodeURIComponent(j.email || '') + '&n=' + encodeURIComponent(j.displayName || '');
+    say(EN ? '✓ Done. Returning to the game…' : '✓ Listo. Volviendo al juego…', '#3dff8a');
+    location.href = 'driftloop://login#' + h;
+    setTimeout(() => { m.innerHTML = (EN ? '✓ Signed in. ' : '✓ Sesión iniciada. ') + '<a href="driftloop://login#' + h + '">' + (EN ? 'Back to Drift Loop' : 'Volver a Drift Loop') + '</a>'; }, 1500);
+  } catch (e) { say(EN ? 'Could not sign in. Try again.' : 'No se pudo iniciar sesión. Probá de nuevo.', '#ff8a7a'); }
+}
+const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
+s.onload = () => { google.accounts.id.initialize({ client_id: CLIENT, callback: done });
+  google.accounts.id.renderButton(document.getElementById('g'), { theme: 'filled_black', size: 'large', shape: 'pill', text: 'continue_with', locale: EN ? 'en' : 'es-419' }); };
+s.onerror = () => say(EN ? 'Could not load Google.' : 'No se pudo cargar Google.', '#ff8a7a');
+document.head.appendChild(s);
+</script></body></html>
