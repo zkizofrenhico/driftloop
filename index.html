@@ -608,6 +608,118 @@ miniPath.closePath();
    GRÁFICOS REALISTAS — texturas procedurales + escenario horneado en tiles
    ===================================================================== */
 const SUN = { x: 0.6, y: 0.8 };            // dirección de las sombras en el mundo (luz de tarde)
+/* =====================================================================
+   EFECTOS AL MÁXIMO (se apagan solos si el celular no da):
+   FXL 3 = brillo (bloom), reflejo en la carrocería, gotas en la cámara · 2 = partículas de ambiente · 1 = base
+   ===================================================================== */
+var FXL = (function () {
+  try { const q = (JSON.parse(localStorage.getItem('driftloop_profile')) || {}).set || {}; if (q.quality === 'ahorro') return 1;
+        const cap = +localStorage.getItem('driftloop_fxl'); return cap >= 1 && cap <= 3 ? cap : 3; } catch(e) { return 3; }
+})();
+function fxDown() { if (FXL <= 1) return false; FXL--; try { localStorage.setItem('driftloop_fxl', FXL); } catch(e) {} return true; }
+// ---- brillo: lo más claro de la imagen se difumina y se suma encima ----
+let bloomC = null, bloomG = null;
+const BLOOM_OK = (function () { try { const g = document.createElement('canvas').getContext('2d'); return 'filter' in g; } catch(e) { return false; } })();
+function drawBloom() {
+  if (FXL < 3 || !BLOOM_OK) return;
+  const k = WX.night ? 0.26 : WX.dusk ? 0.14 : THEME.lava ? 0.12 : 0;   // de día solo brilla la lava
+  if (!k) return;
+  const bw = Math.max(1, Math.ceil(cv.width/5)), bh = Math.max(1, Math.ceil(cv.height/5));
+  if (!bloomC || bloomC.width !== bw || bloomC.height !== bh) { bloomC = mkCanvas(bw, bh); bloomG = bloomC.getContext('2d'); }
+  bloomG.globalCompositeOperation = 'copy';
+  bloomG.filter = `brightness(${WX.night ? 0.6 : 0.7}) contrast(${WX.night ? 7 : 5}) saturate(1.4) blur(${Math.max(2, bw/90).toFixed(1)}px)`;
+  bloomG.drawImage(cv, 0, 0, bw, bh); bloomG.filter = 'none';
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = k;
+  ctx.drawImage(bloomC, 0, 0, cv.width, cv.height); ctx.restore();
+}
+// ---- reflejo del sol en la carrocería (se mueve cuando el auto gira) ----
+const sheenMask = {}; let sheenTmp = null, sheenG = null;
+function drawSheen(c) {
+  if (FXL < 3 || WX.night) return;
+  const spr = carSprite(c), key = c.model;
+  if (!sheenMask[key]) { const m = mkCanvas(64, 40), g = m.getContext('2d'); g.drawImage(spr, 2, 2, 60, 36); g.globalCompositeOperation = 'source-in'; g.fillStyle = '#fff'; g.fillRect(0, 0, 64, 40); sheenMask[key] = m; }
+  if (!sheenTmp) { sheenTmp = mkCanvas(64, 40); sheenG = sheenTmp.getContext('2d'); }
+  const a = Math.atan2(-SUN.y, -SUN.x) - c.va, dx = Math.cos(a), dy = Math.sin(a);
+  sheenG.globalCompositeOperation = 'copy'; sheenG.drawImage(sheenMask[key], 0, 0);
+  sheenG.globalCompositeOperation = 'source-in';
+  const gr = sheenG.createLinearGradient(32 - dx*26, 20 - dy*26, 32 + dx*26, 20 + dy*26);
+  gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.62, 'rgba(255,255,255,0)'); gr.addColorStop(0.78, 'rgba(255,250,235,.85)'); gr.addColorStop(0.9, 'rgba(255,255,255,0)');
+  sheenG.fillStyle = gr; sheenG.fillRect(0, 0, 64, 40);
+  ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = WX.dusk ? 0.28 : 0.38;
+  ctx.drawImage(sheenTmp, -32, -20, 64, 40);
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+}
+// ---- partículas de ambiente según el escenario ----
+const AMB = []; let ambKind = '';
+function ambType() {
+  const t = TRK.theme;
+  if (WX.wet) return '';
+  if (t === 'volcan') return 'ember';
+  if (t === 'nieve') return 'snow';
+  if (t === 'desierto') return 'sand';
+  if (WX.night) return t === 'pasto' ? 'firefly' : '';
+  return t === 'costa' ? 'mote' : 'leaf';
+}
+function ambSpawn(p, near) {
+  const a = Math.random()*6.283, r = near ? Math.sqrt(Math.random())*620 : 560 + Math.random()*80;
+  p.x = cam.x + Math.cos(a)*r; p.y = cam.y + Math.sin(a)*r; p.ph = Math.random()*6.28; p.s = 0.6 + Math.random()*0.8; p.rot = Math.random()*6.28;
+  p.vx = rand(-12, 12); p.vy = rand(-12, 12); p.col = ['#7fb24a', '#c9a227', '#d9772b', '#a8c94a'][(Math.random()*4)|0];
+}
+function drawAmbient(R) {
+  const k = FXL >= 2 ? ambType() : '';
+  if (k !== ambKind) { AMB.length = 0; ambKind = k; }
+  if (!k) return;
+  const n = k === 'sand' ? 34 : k === 'snow' ? 60 : k === 'firefly' ? 26 : 34, dt = Math.min(0.05, lastDt || 0.016), t = animT;
+  while (AMB.length < n) { const p = {}; ambSpawn(p, true); AMB.push(p); }
+  const wind = k === 'sand' ? [210, 40] : k === 'snow' ? [22, 30] : k === 'ember' ? [10, -6] : [16, 8];
+  for (const p of AMB) {
+    p.ph += dt;
+    if (k === 'ember') { p.vy -= 6*dt; p.vx += Math.sin(p.ph*3)*20*dt; }
+    else if (k === 'leaf') { p.rot += dt*(1.5 + p.s); p.vx = wind[0] + Math.sin(p.ph*1.3)*25; p.vy = wind[1] + Math.cos(p.ph*0.9)*12; }
+    else if (k === 'firefly') { p.vx = Math.sin(p.ph*0.7 + p.s*5)*18; p.vy = Math.cos(p.ph*0.6 + p.s*3)*18; }
+    else { p.vx = wind[0]*p.s; p.vy = wind[1]*p.s; }
+    p.x += p.vx*dt; p.y += p.vy*dt;
+    if (Math.abs(p.x - cam.x) > 720 || Math.abs(p.y - cam.y) > 720) ambSpawn(p, false);
+    if (!nearCam(p.x, p.y, R)) continue;
+    if (k === 'ember') {
+      const a = 0.55 + 0.45*Math.sin(p.ph*7 + p.s*9), s = 5*p.s;
+      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = a; ctx.drawImage(puffGlowWarm, p.x - s*2, p.y - s*2, s*4, s*4);
+      ctx.fillStyle = '#ffd27a'; ctx.fillRect(p.x - 1, p.y - 1, 2, 2); ctx.globalCompositeOperation = 'source-over';
+    } else if (k === 'firefly') {
+      const a = Math.max(0, Math.sin(p.ph*2 + p.s*7)), s = 6;
+      if (a < 0.05) continue;
+      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = a*0.9; ctx.fillStyle = 'rgba(190,255,120,.35)';
+      ctx.beginPath(); ctx.arc(p.x, p.y, s, 0, 7); ctx.fill(); ctx.fillStyle = '#eaffb0'; ctx.fillRect(p.x - 1, p.y - 1, 2, 2); ctx.globalCompositeOperation = 'source-over';
+    } else if (k === 'snow') {
+      ctx.globalAlpha = 0.75; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p.x, p.y, 1.2 + p.s, 0, 7); ctx.fill();
+    } else if (k === 'sand') {
+      ctx.globalAlpha = 0.28; ctx.strokeStyle = '#e8cf98'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - p.vx*0.12, p.y - p.vy*0.12); ctx.stroke();
+    } else if (k === 'mote') {
+      ctx.globalAlpha = 0.35 + 0.25*Math.sin(p.ph*2); ctx.fillStyle = '#fffbe8'; ctx.beginPath(); ctx.arc(p.x, p.y, 1 + p.s, 0, 7); ctx.fill();
+    } else {
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.globalAlpha = 0.85; ctx.fillStyle = p.col;
+      ctx.beginPath(); ctx.ellipse(0, 0, 3.6*p.s, 1.8*p.s, 0, 0, 7); ctx.fill(); ctx.restore();
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+// ---- gotas de lluvia sobre la "lente" de la cámara ----
+const LENS = [];
+function drawLensRain() {
+  if (FXL < 3 || !(WX.rainK > 0.35) || state === 'menu') { LENS.length = 0; return; }
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const dt = Math.min(0.05, lastDt || 0.016), n = Math.round(10*WX.rainK);
+  if (LENS.length < n && Math.random() < 0.08) LENS.push({ x: Math.random()*W, y: Math.random()*H*0.85, r: rand(3, 9), t: 0, life: rand(1.5, 4), v: 0 });
+  for (let i = LENS.length - 1; i >= 0; i--) {
+    const d = LENS[i]; d.t += dt; if (d.t > d.life) { LENS.splice(i, 1); continue; }
+    if (d.r > 6.5) { d.v += 40*dt; d.y += d.v*dt; }
+    const a = Math.min(1, d.t*4, (d.life - d.t)*2)*0.5;
+    ctx.globalAlpha = a; ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, 7); ctx.stroke();
+    ctx.fillStyle = 'rgba(200,220,255,.12)'; ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.beginPath(); ctx.arc(d.x - d.r*0.35, d.y - d.r*0.4, d.r*0.22, 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
 // Clima y hora del día
 const WEATHERS = {
   dia:      { name: 'DÍA',       icon: '☀', night: false, wet: false, dusk: false, grip: 1.00, pay: 1.0 },
@@ -2719,7 +2831,7 @@ function render() {
   for (const c of cars) {
     if (!nearCam(c.wx, c.wy, R)) continue;
     const bo = bodyOff(c); ctx.save(); ctx.translate(c.wx + bo[0], c.wy + bo[1]); ctx.rotate(c.va);
-    ctx.drawImage(carSprite(c), -30, -18, 60, 36); drawDamage(c);
+    ctx.drawImage(carSprite(c), -30, -18, 60, 36); drawDamage(c); if (FXL >= 3 && nearCam(c.wx, c.wy, 520)) drawSheen(c);
     if (c.popFx > 0) { const L = LAYOUT[c.model], s = 10 + c.popFx*120; ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(puffGlowWarm, L.tail - s*1.1, -s/2, s, s); ctx.drawImage(puffGlowRed, L.tail - s*1.4, -s*0.35, s*0.7, s*0.7); ctx.globalCompositeOperation = 'source-over'; }
     const brake = racingNow && !c.throttle && c.v > 20;
     if (brake) {
@@ -2738,6 +2850,7 @@ function render() {
 
   // Humo / chispas encima
   drawParts(false);
+  drawAmbient(R);
 
   // Pórtico de largada (por encima de los autos)
   sample(0, tA);
@@ -2774,8 +2887,8 @@ function render() {
 
   if (WX.night) drawNight(R);
   drawWeatherOverlay();
-  if (introPhase === 'play') { drawPost(); drawIntro(); }
-  else { drawPost(); drawTags(); drawFX(); drawHUD(); drawTutorial(); }
+  if (introPhase === 'play') { drawBloom(); drawPost(); drawIntro(); }
+  else { drawBloom(); drawPost(); drawLensRain(); drawTags(); drawFX(); drawHUD(); drawTutorial(); }
 }
 
 /* ---------- Noche: capa de oscuridad con "agujeros" de luz (faros y torres) ---------- */
@@ -3703,7 +3816,7 @@ function pRender() {
   row('#pRace', 'Rivales', '', seg('rivals', [[3, '3'], [5, '5'], [7, '7']], applySettings));
   row('#pRace', 'Dificultad', '', seg('diff', Object.entries(DIFFS).map(([k, v]) => [k, v[0]]), applySettings));
   if (!inRace) row('#pGame', 'Idioma', '🌐', seg('lang', [['auto', 'Auto'], ['es', 'Español'], ['en', 'English']], () => { saveProf(); location.reload(); }));
-  row('#pGfx', 'Calidad', 'Se aplica al volver a abrir el juego. Ahorro = menos batería', seg('quality', [['maxima', 'Máxima'], ['auto', 'Auto'], ['ahorro', 'Ahorro']]));
+  row('#pGfx', 'Calidad', 'Se aplica al volver a abrir el juego. Ahorro = menos batería', seg('quality', [['maxima', 'Máxima'], ['auto', 'Auto'], ['ahorro', 'Ahorro']], () => { try { localStorage.removeItem('driftloop_fxl'); } catch(e) {} }));
   if (inRace) { const n = document.createElement('div'); n.className = 'note'; n.textContent = 'Los cambios de "Próxima carrera" se aplican al reiniciar o en la siguiente carrera.'; q('#pRace').appendChild(n); }
 }
 addEventListener('resize', () => { if (paused) { pEl.style.left = Math.round((innerWidth - W)/2) + 'px'; pEl.style.width = W + 'px'; } });
@@ -6134,7 +6247,8 @@ function frame(now) {
     perfAcc += raw; perfN++;
     if (perfAcc > 1.5) {
       const avg = perfAcc/perfN;
-      if (avg > (MAXQ ? 0.045 : 0.026) && QUAL < 2) { QUAL = avg > 0.06 ? 2 : QUAL + 1; resize(); postCanvas = null; if (QUAL === 2 && TSC > (MAXQ ? 1.25 : 0.9)) { TSC = MAXQ ? 1.25 : 0.9; clearTiles(); } }
+      if (avg > 0.022 && fxDown()) { /* primero se apagan efectos */ }
+      else if (avg > (MAXQ ? 0.045 : 0.026) && QUAL < 2) { QUAL = avg > 0.06 ? 2 : QUAL + 1; resize(); postCanvas = null; if (QUAL === 2 && TSC > (MAXQ ? 1.25 : 0.9)) { TSC = MAXQ ? 1.25 : 0.9; clearTiles(); } }
       perfAcc = 0; perfN = 0;
     }
   }
