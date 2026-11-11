@@ -3195,7 +3195,7 @@ function render() {
   if (WX.night) drawNight(R);
   drawWeatherOverlay();
   if (introPhase === 'play') { drawBloom(); drawPost(); drawIntro(); }
-  else { drawBloom(); drawPost(); drawLensRain(); drawTags(); drawFX(); drawHUD(); drawTutorial(); }
+  else { drawBloom(); drawPost(); drawSpeedBlur(); drawLensRain(); drawTags(); drawFX(); drawHUD(); drawTutorial(); }
 }
 
 /* ---------- Noche: capa de oscuridad con "agujeros" de luz (faros y torres) ---------- */
@@ -3386,19 +3386,35 @@ function drawTags() {
   }
 }
 
+// ---- velocidad: los bordes de la imagen se desenfocan y se estiran hacia afuera; el centro (tu auto y la curva que viene) queda nítido ----
+let sbC = null, sbG = null, sbMask = null, sbK = 0;
+function drawSpeedBlur() {
+  const r = player.v/C.velocidadMaxima, on = state === 'race' && !replayOn && FXL >= 2;
+  const want = !on ? 0 : player.boostT > 0 ? 1 : Math.max(0, Math.min(1, (r - 0.72)*3.2));
+  sbK += (want - sbK)*Math.min(1, (lastDt || 0.016)*5);
+  if (sbK < 0.03) return;
+  const bw = Math.max(1, Math.ceil(cv.width/5)), bh = Math.max(1, Math.ceil(cv.height/5));
+  if (!sbC || sbC.width !== bw || sbC.height !== bh) {
+    sbC = mkCanvas(bw, bh); sbG = sbC.getContext('2d');
+    sbMask = sbG.createRadialGradient(bw/2, bh*0.64, Math.min(bw, bh)*0.36, bw/2, bh*0.64, Math.hypot(bw, bh)*0.62);
+    sbMask.addColorStop(0, 'rgba(0,0,0,0)'); sbMask.addColorStop(0.55, 'rgba(0,0,0,.75)'); sbMask.addColorStop(1, 'rgba(0,0,0,1)');
+  }
+  sbG.globalCompositeOperation = 'copy'; sbG.imageSmoothingEnabled = true; sbG.drawImage(cv, 0, 0, bw, bh);
+  sbG.globalCompositeOperation = 'destination-in'; sbG.fillStyle = sbMask; sbG.fillRect(0, 0, bw, bh);
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const cw = cv.width, ch = cv.height, cx = cw/2, cy = ch*0.64;
+  ctx.globalAlpha = Math.min(1, sbK); ctx.drawImage(sbC, 0, 0, cw, ch);
+  for (const z of [1.018, 1.036, 1.056]) { ctx.globalAlpha = 0.42*sbK; ctx.drawImage(sbC, cx - cx*z, cy - cy*z, cw*z, ch*z); }   // tres copias apenas más grandes: el borde se estira hacia afuera
+  ctx.restore();
+}
+
 function drawFX() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   const r = player.v/C.velocidadMaxima;
   const boost = player.boostT > 0;
-  if ((r > 0.78 || boost) && state === 'race') {
-    const k = boost ? 0.9 : (r - 0.78)*2.2, cx = W/2, cy = H*0.62, D = Math.hypot(W, H)*0.5;
-    ctx.strokeStyle = `rgba(255,255,255,${Math.min(0.5, k*0.45).toFixed(3)})`; ctx.lineWidth = 1.4; ctx.beginPath();
-    for (let i = 0; i < (boost ? 34 : 22); i++) {
-      const a = Math.random()*Math.PI*2, r1 = D*rand(0.55, 0.85), r2 = r1 + rand(40, 140)*(0.6 + k);
-      ctx.moveTo(cx + Math.cos(a)*r1, cy + Math.sin(a)*r1); ctx.lineTo(cx + Math.cos(a)*r2, cy + Math.sin(a)*r2);
-    }
-    ctx.stroke();
-    if (boost) { const g = ctx.createRadialGradient(cx, cy, D*0.3, cx, cy, D*1.1); g.addColorStop(0, 'rgba(255,140,40,0)'); g.addColorStop(1, 'rgba(255,120,30,.22)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+  if (boost && state === 'race') {   // resplandor del turbo en los bordes
+    const cx = W/2, cy = H*0.62, D = Math.hypot(W, H)*0.5;
+    const g = ctx.createRadialGradient(cx, cy, D*0.3, cx, cy, D*1.1); g.addColorStop(0, 'rgba(255,140,40,0)'); g.addColorStop(1, 'rgba(255,120,30,.22)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
   if (warn && SET.warn) {
     const a = 0.22 + 0.14*Math.sin(warnPulse);
