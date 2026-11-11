@@ -528,6 +528,8 @@ const DAILY = (function () {
 if (DAILY) TRACKS.diaria = { name: DAILY.name, theme: DAILY.theme, cp: DAILY.cp, daily: true };
 // Circuito veloz: rectas largas y curvas amplias (camiones y autos de mucha punta)
 TRACKS.superovalo = { name: 'Súper Óvalo', theme: 'pasto', cp: [[0,0],[720,0],[1440,0],[2160,0],[2880,0],[3600,0],[4224,208],[4480,768],[4240,1344],[3600,1536],[2880,1536],[2240,1616],[1840,2000],[1360,2304],[640,2336],[0,2336],[-608,2128],[-864,1568],[-864,768],[-608,208]] };
+// Circuito de Gran Premio: recta principal muy larga para pasar con rebufo, eses rápidas y horquillas amplias
+TRACKS.granpremio = { name: 'Circuito Gran Premio', theme: 'pasto', cp: [[0,0],[700,0],[1400,0],[2100,0],[2800,0],[3500,0],[4060,168],[4312,630],[4130,1120],[3640,1330],[3220,1610],[3290,2100],[3010,2520],[2450,2590],[2030,2310],[1610,2030],[1120,2170],[840,2590],[350,2730],[-210,2520],[-490,2030],[-350,1470],[-700,1050],[-840,560],[-560,168]] };
 // Etapas de rally: usan un trazado que ya existe, pero casi todo es tierra, grava o nieve (solo la recta de largada es asfalto)
 if (TRACKS.bosque) TRACKS.rsierra = Object.assign({}, TRACKS.bosque, { name: 'Rally de la Sierra', rally: true, surf: [[0.07, 0.3, 'tierra'], [0.3, 0.46, 'grava'], [0.46, 0.8, 'tierra'], [0.8, 0.95, 'grava']] });
 if (TRACKS.canon) TRACKS.rdesierto = Object.assign({}, TRACKS.canon, { name: 'Rally del Desierto', rally: true, surf: [[0.07, 0.36, 'grava'], [0.36, 0.62, 'tierra'], [0.62, 0.95, 'grava']] });
@@ -1792,7 +1794,17 @@ MODELS.camionx = { name: 'Súper Camión Turbo', desc: 'El rey de la categoría:
             hp: 1500, kg: 5000, drv: 'T', truck: true, mass: 2.6, steerK: 0.9, brakeK: 0.82, shape: 'camion',
             len: 52, wid: 26, vmax: 0.93, acc: 0.9, grip: 0.98, wt: 1.2,
             snd: { cyl: 8, cross: false, scale: 0.6, fc: 0.6, pipe: 0.7, d1: 0.0044 } };
-const MODEL_KEYS = ['gt', 'hatch', 'muscle', 'proto', 'jdm', 'hiper', 'rcoupe', 'r4x4', 'camion', 'camionx'];
+// Fórmulas: livianos, con muchísimo agarre y frenos; en un choque salen despedidos (mass baja)
+MODELS.fjr = { name: 'Fórmula Junior', desc: 'Tu primer monoplaza: liviano, pegado al piso y muy sensible.', price: 9000, lvl: 7,
+            hp: 180, kg: 520, drv: 'T', formula: true, mass: 0.55, steerK: 1.12, brakeK: 1.25, shape: 'formula',
+            len: 46, wid: 22, vmax: 1.03, acc: 1.12, grip: 1.2, wt: 0.62,
+            snd: { cyl: 4, cross: false, scale: 1.35, fc: 1.8, pipe: 0.36, d1: 0.0014 } };
+MODELS.f1 = { name: 'Fórmula GP', desc: 'La máxima categoría: frena tardísimo y dobla como sobre rieles.', price: 35000, lvl: 15,
+            hp: 950, kg: 800, drv: 'T', formula: true, mass: 0.6, steerK: 1.15, brakeK: 1.4, shape: 'formula',
+            len: 46, wid: 22, vmax: 1.2, acc: 1.26, grip: 1.3, wt: 0.55,
+            snd: { cyl: 12, cross: false, scale: 1.45, fc: 1.9, pipe: 0.34, d1: 0.0013 } };
+const MODEL_KEYS = ['gt', 'hatch', 'muscle', 'proto', 'jdm', 'hiper', 'rcoupe', 'r4x4', 'camion', 'camionx', 'fjr', 'f1'];
+const clsOf = k => { const m = MODELS[k] || {}; return m.truck ? 'truck' : m.formula ? 'formula' : ''; };   // categorías que solo corren entre ellas
 const shapeOf = k => (MODELS[k] && MODELS[k].shape) || k;
 const UPGRADES = [
   { k: 'motor',  name: 'Motor',           desc: 'Más aceleración en cada nivel',                base: 600 },
@@ -1846,6 +1858,10 @@ function fmtMoney(n) { return '$ ' + Math.round(n).toLocaleString(EN ? 'en-US' :
 const SPR = MAXQ ? 6 : 4;                     // px por unidad de mundo en los sprites
 function bodyPathM(g, m) {
   g.beginPath();
+  if (m === 'formula') {   // fuselaje fino con pontones
+    g.moveTo(24, -1.6); g.lineTo(24, 1.6); g.lineTo(8, 3.2); g.lineTo(5, 8.6); g.lineTo(-12, 8.6); g.quadraticCurveTo(-15, 8, -16, 5); g.lineTo(-22, 3.5);
+    g.lineTo(-22, -3.5); g.lineTo(-16, -5); g.quadraticCurveTo(-15, -8, -12, -8.6); g.lineTo(5, -8.6); g.lineTo(8, -3.2); g.closePath(); return;
+  }
   if (m === 'camion') {   // cabina ancha adelante y chasis más angosto atrás
     g.moveTo(23, -13); g.quadraticCurveTo(25.5, -12.5, 25.5, -9); g.lineTo(25.5, 9); g.quadraticCurveTo(25.5, 12.5, 23, 13);
     g.lineTo(8, 13); g.lineTo(7, 10.5); g.lineTo(-25, 10.5); g.quadraticCurveTo(-27, 10.5, -27, 8.5); g.lineTo(-27, -8.5);
@@ -1898,6 +1914,7 @@ const LAYOUT = {
   proto:  { fw: [10, 9], rw: [-16, 10.5], wy: 12.3, ws: null, roof: null, rear: null, nose: 23, tail: -21.6, hw: 12 },
   jdm:    { fw: [9.5, 8.6], rw: [-16.5, 9.6], wy: 10.9, ws: [3, 9.5, 6.4, 7.8], roof: [-9, 11.5, 7.8], rear: [-14.5, -9, 7.4, 6.2], nose: 21.6, tail: -21.4, hw: 10.8 },
   hiper:  { fw: [10.5, 9.5], rw: [-17.5, 11], wy: 12.4, ws: [0.5, 8.5, 5.8, 8.4], roof: [-9.5, 10, 7], rear: [-16.5, -9.5, 7, 5.2], nose: 24.6, tail: -22.8, hw: 12.1 },
+  formula: { fw: [11.5, 8], rw: [-20.5, 9.5], wy: 12.8, ws: [0, 3, 2, 2.5], roof: [-9, -2, 4], rear: [-12, -9, 3, 3], nose: 24, tail: -22, hw: 9 },
   camion: { fw: [11, 9.5], rw: [-25.5, 15], wy: 12.4, ws: [20.5, 23.8, 10.5, 11.5], roof: [9, 20, 11.5], rear: [5, 7, 10, 10], nose: 25.5, tail: -27, hw: 13 }
 };
 for (const k in MODELS) if (MODELS[k].shape) LAYOUT[k] = LAYOUT[MODELS[k].shape];
@@ -2026,6 +2043,23 @@ function makeCarSprite(spec) {
     g.fillStyle = '#141414'; rrG(g, -26, -13, 4.2, 26, 0.8); g.fill();
     g.fillStyle = rgba(A0, 1); g.fillRect(-26, -13, 4.2, 1.8); g.fillRect(-26, 11.2, 4.2, 1.8);
     g.fillStyle = 'rgba(255,255,255,.25)'; g.fillRect(-25.6, -12, 1, 24);
+  } else if (m === 'formula') {
+    // ruedas anchas a la vista, brazos de suspensión, alerones, cockpit con casco y halo
+    g.strokeStyle = '#1a1b1f'; g.lineWidth = 0.7; g.beginPath();
+    for (const sd of [-1, 1]) { g.moveTo(13, sd*2.6); g.lineTo(15.5, sd*10.6); g.moveTo(17.5, sd*2.2); g.lineTo(15.5, sd*10.6); g.moveTo(-14, sd*5.5); g.lineTo(-16, sd*10.6); g.moveTo(-19, sd*4); g.lineTo(-16, sd*10.6); }
+    g.stroke();
+    for (const sd of [-1, 1]) for (const [x, w, t] of [[11.5, 8, 4.6], [-20.5, 9.5, 5.4]]) {
+      const y = sd > 0 ? 9.8 : -9.8 - t, gr = g.createLinearGradient(0, y, 0, y + t); gr.addColorStop(0, '#0b0b0b'); gr.addColorStop(0.5, '#303030'); gr.addColorStop(1, '#0b0b0b');
+      g.fillStyle = gr; rrG(g, x, y, w, t, 1.5); g.fill(); const rc = RIM_COL[spec.rim] || '#c9a227'; g.fillStyle = rc; g.fillRect(x + w*0.3, y + t/2 - 0.35, w*0.4, 0.7);
+    }
+    g.fillStyle = rgba(A0, 1); rrG(g, 21.6, -12.6, 3.2, 25.2, 0.8); g.fill(); g.fillStyle = rgba(mul(C0, 0.8), 1); g.fillRect(21.2, -12.9, 4, 1.5); g.fillRect(21.2, 11.4, 4, 1.5);
+    g.fillStyle = '#121316'; rrG(g, -25.2, -10.6, 4, 21.2, 0.8); g.fill(); g.fillStyle = rgba(A0, 1); g.fillRect(-24.6, -10.6, 1, 21.2); g.fillStyle = rgba(mul(C0, 0.9), 1); g.fillRect(-25.4, -11, 4.4, 1.4); g.fillRect(-25.4, 9.6, 4.4, 1.4);
+    g.fillStyle = 'rgba(0,0,0,.45)'; for (const sd of [-1, 1]) { rrG(g, 0, sd > 0 ? 6 : -7.6, 4.5, 1.6, 0.7); g.fill(); }
+    g.fillStyle = '#101216'; g.beginPath(); g.ellipse(-3, 0, 5.6, 2.9, 0, 0, 7); g.fill();
+    g.fillStyle = '#ffd400'; g.beginPath(); g.arc(-4, 0, 2.1, 0, 7); g.fill(); g.fillStyle = '#111'; g.fillRect(-3.2, -1.3, 1.2, 2.6);
+    g.strokeStyle = '#2a2c31'; g.lineWidth = 0.8; g.beginPath(); g.arc(-3.5, 0, 3.3, -1.25, 1.25); g.moveTo(-0.2, 0); g.lineTo(2.6, 0); g.stroke();
+    g.fillStyle = '#17181c'; rrG(g, -10.5, -1.7, 4.5, 3.4, 1); g.fill();
+    number(12, 0, 2.5);
   } else if (m === 'camion') {
     // chasis a la vista con plato de enganche, tanques, escapes verticales y cabina con deflector
     g.fillStyle = '#1b1d22'; rrG(g, -25.5, -8.4, 32, 16.8, 1.4); g.fill();
@@ -2085,7 +2119,7 @@ function makeCarSprite(spec) {
     }
     if (m === 'hatch') { g.fillStyle = '#141414'; rrG(g, -18.6, -8, 1.8, 16, 0.6); g.fill(); }
   }
-  for (const y of [-6.6, 6.6]) { const hy = y*(m === 'proto' ? 0.55 : m === 'camion' ? 1.45 : 1);
+  for (const y of (m === 'formula' ? [] : [-6.6, 6.6])) { const hy = y*(m === 'proto' ? 0.55 : m === 'camion' ? 1.45 : 1);
     g.fillStyle = '#1b1d22'; g.beginPath(); g.ellipse(L.nose - 0.5, hy, 1.6, 2.7, 0, 0, 7); g.fill();
     g.fillStyle = '#fffbe6'; g.beginPath(); g.ellipse(L.nose - 0.3, hy, 1.1, 2.2, 0, 0, 7); g.fill();
     g.fillStyle = '#ffffff'; g.beginPath(); g.ellipse(L.nose - 0.1, hy - 0.5, 0.45, 0.9, 0, 0, 7); g.fill(); }
@@ -2112,6 +2146,7 @@ function carShadowFor(m) {
   g.scale(SPR, SPR); g.translate(W0/2 - 1000, H0/2);
   bodyPathM(g, m); g.fillStyle = '#000'; g.fill();
   if (m === 'proto') { g.fillRect(-26, -13, 4.2, 26); }
+  if (m === 'formula') { g.fillRect(21.6, -12.6, 3.2, 25.2); g.fillRect(-25.2, -10.6, 4, 21.2); g.fillRect(11.5, -14.4, 8, 28.8); g.fillRect(-20.5, -15.2, 9.5, 30.4); }
   return (shadowCache[m] = c);
 }
 function rrG(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x+r, y); g.arcTo(x+w, y, x+w, y+h, r); g.arcTo(x+w, y+h, x, y+h, r); g.arcTo(x, y+h, x, y, r); g.arcTo(x, y, x+w, y, r); g.closePath(); }
@@ -2574,7 +2609,7 @@ function resetRace() {
   // los rivales se ponen un poco mejores con tu auto/mejoras y con tus victorias (la carrera sigue pareja)
   const ps = playerStats(), pp = (ps.vmax - 1)*0.6 + (ps.grip - 1)*0.5 + (ps.acc - 1)*0.2;
   const hab = C.habilidadRivales*(1 + Math.min(0.12, Math.max(0, pp)*0.5) + Math.min(0.05, rec.wins*0.005));
-  const AI_MODELS = reqMode ? reqAIModels() : MODELS[prof.model].truck ? ['camion', 'camion', 'camionx'] : ['gt', 'gt', 'hatch', 'muscle'];
+  const AI_MODELS = reqMode ? reqAIModels() : MODELS[prof.model].truck ? ['camion', 'camion', 'camionx'] : MODELS[prof.model].formula ? [prof.model] : ['gt', 'gt', 'hatch', 'muscle'];
   cars = []; let ai = 0;
   for (let i = 0; i < n; i++) {
     const isP = i === pslot, c = makeCar(isP);
@@ -4189,7 +4224,7 @@ function gRender() {
   gEl.querySelector('#gNum').textContent = '#' + prof.num;
   gEl.querySelectorAll('.gtabs button').forEach(b => b.classList.toggle('on', b.dataset.t === gTab));
   { const pr = carPR(gView, null), ch = (t, c) => `<span style="padding:2px 8px;border-radius:5px;background:${c || 'rgba(255,255,255,.1)'}">${t}</span>`;
-    gEl.querySelector('#gSpec').innerHTML = ch('<b>' + carHP(gView, null) + '</b> CV') + ch(MODELS[gView].kg + ' kg') + ch(DRV_TXT(MODELS[gView].drv)) + ch((EN ? 'CLASS ' : 'CLASE ') + prClass(pr), '#e1251b') + ch('PR ' + pr) + (MODELS[gView].truck ? ch(EN ? 'TRUCK' : 'CAMIÓN', '#3f5a7a') : '') + (MODELS[gView].loose ? ch('RALLY · ' + (EN ? 'dirt ' : 'tierra ') + '+' + Math.round(MODELS[gView].loose*100) + '%', '#8a5a1c') : ''); }
+    gEl.querySelector('#gSpec').innerHTML = ch('<b>' + carHP(gView, null) + '</b> CV') + ch(MODELS[gView].kg + ' kg') + ch(DRV_TXT(MODELS[gView].drv)) + ch((EN ? 'CLASS ' : 'CLASE ') + prClass(pr), '#e1251b') + ch('PR ' + pr) + (MODELS[gView].truck ? ch(EN ? 'TRUCK' : 'CAMIÓN', '#3f5a7a') : '') + (MODELS[gView].formula ? ch(EN ? 'FORMULA' : 'FÓRMULA', '#3f5a7a') : '') + (MODELS[gView].loose ? ch('RALLY · ' + (EN ? 'dirt ' : 'tierra ') + '+' + Math.round(MODELS[gView].loose*100) + '%', '#8a5a1c') : ''); }
   // estadísticas: blanco = modelo, verde = lo que suman tus mejoras
   const base = MODELS[gView], sb = statNorm({ vmax: base.vmax, acc: base.acc, grip: base.grip, wt: base.wt }), sn = statNorm(playerStats(gView)), sc = statNorm(playerStats(prof.model));
   const rows = [['VELOCIDAD', 'vel'], ['ACELERACIÓN', 'ace'], ['AGARRE', 'aga'], ['ESTABILIDAD', 'est']];
@@ -4848,7 +4883,7 @@ function resetChampRace() {
     else {
       const r = ROSTER.find(x => x.name === e.name), M = MODELS[r.model];
       c.name = r.name; c.col = r.col; c.acc = r.acc; c.num = r.num; c.stripe = 'doble';
-      const cup = CUPS[prof.champ.cup], ue = upgEff(cup.rup || 0), mk = MODELS[prof.model].truck ? 'camion' : (cup.rmod && cup.rmod[r.name]) || r.model, MM = MODELS[mk];
+      const cup = CUPS[prof.champ.cup], ue = upgEff(cup.rup || 0), mk = MODELS[prof.model].truck ? 'camion' : MODELS[prof.model].formula ? prof.model : (cup.rmod && cup.rmod[r.name]) || r.model, MM = MODELS[mk];
       // los rivales también tienen mejoras (más en cada copa) y en las copas altas usan los mejores autos
       applyModel(c, mk, { vmax: r.vmax*hab*MM.vmax*cup.vm*(1 + 0.025*ue), acc: MM.acc*(1 + 0.05*ue), grip: MM.grip*(1 + 0.03*ue), wt: MM.wt*Math.max(0.45, 1 - 0.09*ue), steer: 1 + 0.06*ue, brake: 1 + 0.08*ue });
       c.skill = Math.min(1.38, r.skill*C.habilidadRivales*cup.sk); c.skillNow = c.skill; c.mistakeP = Math.min(0.6, r.mist*cup.mist);
@@ -6512,6 +6547,8 @@ const REQ_EVENTS = [
   { id: 'hiper',  ico: '👑', name: 'DUELO DE HÍPER',      en: 'HYPERCAR DUEL',     track: 'oasis',      wx: 'noche',    laps: 4, lvl: 25, prize: [15000, 9000, 5000], models: ['hiper'], rivals: 3 },
   { id: 'gptruck',   ico: '🚛', name: 'GRAN PREMIO DE CAMIONES', en: 'TRUCK GRAND PRIX', track: 'superovalo', wx: 'dia',      laps: 3, lvl: 5,  prize: [5000, 3000, 1700],  truck: true },
   { id: 'trucknoche', ico: '⛈', name: 'CAMIONES EN LA TORMENTA', en: 'TRUCKS IN THE STORM', track: 'autodromo', wx: 'tormenta', laps: 3, lvl: 11, prize: [9000, 5400, 3000], truck: true },
+  { id: 'fjunior',   ico: '🏎', name: 'FÓRMULA JUNIOR',  en: 'FORMULA JUNIOR',   track: 'granpremio', wx: 'dia',   laps: 3, lvl: 7,  prize: [6000, 3600, 2000],  models: ['fjr'], cls: 'formula' },
+  { id: 'gpformula', ico: '🏁', name: 'GRAN PREMIO DE FÓRMULA', en: 'FORMULA GRAND PRIX', track: 'granpremio', wx: 'tarde', laps: 4, lvl: 15, prize: [14000, 8400, 4600], models: ['f1'], cls: 'formula' },
   { id: 'rsierra',   ico: '🌲', name: 'RALLY DE LA SIERRA', en: 'SIERRA RALLY',  track: 'rsierra',   wx: 'dia',    laps: 3, lvl: 3,  prize: [3000, 1800, 1000], rally: true },
   { id: 'rdesierto', ico: '🏜', name: 'RALLY DEL DESIERTO', en: 'DESERT RALLY',  track: 'rdesierto', wx: 'tarde',  laps: 3, lvl: 6,  prize: [5000, 3000, 1700], rally: true },
   { id: 'rblanco',   ico: '🏔', name: 'RALLY BLANCO',       en: 'WHITE RALLY',   track: 'rblanco',   wx: 'cambia', laps: 3, lvl: 9,  prize: [8000, 4800, 2700], rally: true }
@@ -6531,7 +6568,7 @@ function reqText(e) {
 function reqCheck(e, model) {
   const m = MODELS[model], free = { f: 1 };
   if (e.models && e.models.indexOf(model) < 0) return { ok: false, why: LX('No es de este evento', 'Not allowed here') };
-  if (!!e.truck !== !!m.truck) return { ok: false, why: m.truck ? LX('Solo corre con camiones', 'Trucks race trucks only') : LX('No es un camión', 'Not a truck') };
+  { const ec = e.truck ? 'truck' : e.cls || '', mc = clsOf(model); if (ec !== mc) return { ok: false, why: mc === 'truck' ? LX('Solo corre con camiones', 'Trucks race trucks only') : mc === 'formula' ? LX('Solo corre con fórmulas', 'Formula cars race each other only') : ec === 'truck' ? LX('No es un camión', 'Not a truck') : LX('No es un fórmula', 'Not a formula car') }; }
   if (e.rally && !m.loose) return { ok: false, why: LX('No es de rally', 'Not a rally car') };
   if (e.drv && m.drv !== e.drv) return { ok: false, why: LX('Tracción ', 'Drive: ') + DRV_TXT(m.drv) };
   if (e.stock) return { ok: true, lim: { f: 0 }, note: Object.values(prof.upg).some(v => v > 0) ? LX('Corre sin tus mejoras', 'Runs without your upgrades') : '' };
@@ -6544,7 +6581,7 @@ function reqCheck(e, model) {
     return { ok: true, lim: { f: lo }, note: LX('Se limita a PR ' + e.maxPR, 'Limited to PR ' + e.maxPR) }; }
   return { ok: true, lim: free, note: '' };
 }
-function reqAIModels() { const e = REQ_CUR, l = MODEL_KEYS.filter(k => { const m = MODELS[k]; return !!e.truck === !!m.truck && !(e.rally && !m.loose) && !(e.models && e.models.indexOf(k) < 0) && !(e.drv && m.drv !== e.drv) && !(e.maxHp && m.hp > e.maxHp) && !(e.minHp && m.hp < e.minHp*0.8) && !(e.maxPR && carPR(k, { f: 0 }) > e.maxPR); }); return l.length ? l : ['gt']; }
+function reqAIModels() { const e = REQ_CUR, l = MODEL_KEYS.filter(k => { const m = MODELS[k]; return (e.truck ? 'truck' : e.cls || '') === clsOf(k) && !(e.rally && !m.loose) && !(e.models && e.models.indexOf(k) < 0) && !(e.drv && m.drv !== e.drv) && !(e.maxHp && m.hp > e.maxHp) && !(e.minHp && m.hp < e.minHp*0.8) && !(e.maxPR && carPR(k, { f: 0 }) > e.maxPR); }); return l.length ? l : ['gt']; }
 function reqBest(id) { return (prof.req || {})[id] || 0; }
 function reqMenuHTML(a) {
   const done = REQ_EVENTS.filter(e => reqBest(e.id) === 1).length, open = REQ_EVENTS.filter(e => (prof.lvl || 1) >= e.lvl).length;
