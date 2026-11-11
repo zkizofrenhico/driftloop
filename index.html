@@ -623,7 +623,7 @@ miniPath.closePath();
 /* =====================================================================
    GRÁFICOS REALISTAS — texturas procedurales + escenario horneado en tiles
    ===================================================================== */
-const SUN = { x: 0.6, y: 0.8 };            // dirección de las sombras en el mundo (luz de tarde)
+const SUN = { x: 0.78, y: 1.04 };            // dirección de las sombras en el mundo (luz de tarde)
 /* =====================================================================
    EFECTOS AL MÁXIMO (se apagan solos si el celular no da):
    FXL 3 = brillo (bloom), reflejo en la carrocería, gotas en la cámara · 2 = partículas de ambiente · 1 = base
@@ -860,7 +860,7 @@ function applyWeather(k) {
   // bakeWet: cómo se hornea el piso (fijo); rainK/wetK/skyK: intensidad de lluvia, pista mojada y cielo (cambian en carrera)
   WX.bakeWet = WX.wet; WX.rainK = WX.wet ? 1 : 0; WX.wetK = WX.wet ? 1 : 0; WX.skyK = WX.wet ? 1 : 0;
   dynW = { phase: 0, t: 0, onset: 0 };
-  if (WX.dusk) { SUN.x = 1.25; SUN.y = 1.55; } else if (WX.night) { SUN.x = 0.2; SUN.y = 0.25; } else { SUN.x = 0.6; SUN.y = 0.8; }
+  if (WX.dusk) { SUN.x = 1.25; SUN.y = 1.55; } else if (WX.night) { SUN.x = 0.2; SUN.y = 0.25; } else { SUN.x = 0.78; SUN.y = 1.04; }
   clearTiles();
 }
 /* Clima cambiante: en algún momento de la carrera se nubla, llueve y la pista se moja de a poco */
@@ -1798,6 +1798,13 @@ function makeCarSprite(spec) {
   for (const [x, y] of [[L.fw[0] + 4, -hw], [L.fw[0] + 4, hw], [L.rw[0] + 5, -hw], [L.rw[0] + 5, hw]]) { const r = g.createRadialGradient(x, y, 0, x, y, 6); r.addColorStop(0, 'rgba(0,0,0,.35)'); r.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = r; g.fillRect(x - 6, y - 6, 12, 12); }
   const sp = g.createRadialGradient(L.nose - 8, -3, 0, L.nose - 8, -3, 9); sp.addColorStop(0, 'rgba(255,255,255,.45)'); sp.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = sp; g.fillRect(L.nose - 18, -12, 20, 18);
+  // volumen: la cola más oscura, el capó más claro, borde redondeado y filo de luz en los costados
+  const lg = g.createLinearGradient(L.tail, 0, L.nose, 0); lg.addColorStop(0, 'rgba(0,0,0,.26)'); lg.addColorStop(0.45, 'rgba(0,0,0,0)'); lg.addColorStop(1, 'rgba(255,255,255,.12)');
+  g.fillStyle = lg; g.fillRect(-30, -18, 60, 36);
+  bodyPathM(g, m); g.strokeStyle = 'rgba(0,0,0,.30)'; g.lineWidth = 2.6; g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,.30)'; g.lineWidth = 0.45; g.beginPath();
+  for (const sd of [-1, 1]) { g.moveTo(L.tail + 6, sd*hw*0.66); g.quadraticCurveTo(0, sd*hw*0.72, L.nose - 7, sd*hw*0.6); }
+  g.stroke();
   g.restore();
 
   const glass = (x0, x1, wa, wb) => { g.beginPath(); g.moveTo(x1, -wa); g.lineTo(x1, wa); g.lineTo(x0, wb); g.lineTo(x0, -wb); g.closePath(); };
@@ -1820,7 +1827,16 @@ function makeCarSprite(spec) {
     g.fillStyle = rgba(A0, 1); g.fillRect(-26, -13, 4.2, 1.8); g.fillRect(-26, 11.2, 4.2, 1.8);
     g.fillStyle = 'rgba(255,255,255,.25)'; g.fillRect(-25.6, -12, 1, 24);
   } else {
+    // líneas de chapa: capó, baúl y puertas
+    g.strokeStyle = 'rgba(0,0,0,.32)'; g.lineWidth = 0.4; g.beginPath();
+    g.moveTo(L.ws[1] + 1.4, -hw + 2.2); g.quadraticCurveTo(L.ws[1] + 2.6, 0, L.ws[1] + 1.4, hw - 2.2);
+    g.moveTo(L.rear[0] - 1.2, -hw + 2.6); g.lineTo(L.rear[0] - 1.2, hw - 2.6);
+    for (const sd of [-1, 1]) { const dx = L.roof[0] + L.roof[1]*0.5; g.moveTo(dx, sd*L.roof[2]); g.lineTo(dx, sd*(hw - 0.9)); }
+    g.stroke();
     g.fillStyle = glassGrad(L.ws[0], L.ws[1]); glass(...L.ws); g.fill();
+    g.save(); glass(...L.ws); g.clip();   // reflejo del cielo en el parabrisas
+    g.fillStyle = 'rgba(235,245,255,.16)'; g.beginPath(); g.moveTo(L.ws[0], -9); g.lineTo(L.ws[0] + 1.2, -9); g.lineTo(L.ws[1] + 0.4, -1); g.lineTo(L.ws[1] - 0.8, -1); g.closePath(); g.fill();
+    g.restore(); glass(...L.ws); g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 0.45; g.stroke();
     const [rx, rl, rh] = L.roof;
     const rf = g.createLinearGradient(0, -rh, 0, rh); rf.addColorStop(0, rgba(mul(C0, 0.6), 1)); rf.addColorStop(0.5, rgba(mul(C0, 1.25), 1)); rf.addColorStop(1, rgba(mul(C0, 0.6), 1));
     g.fillStyle = rf; rrG(g, rx, -rh, rl, rh*2, 2.5); g.fill();
@@ -1849,8 +1865,13 @@ function makeCarSprite(spec) {
     }
     if (m === 'hatch') { g.fillStyle = '#141414'; rrG(g, -18.6, -8, 1.8, 16, 0.6); g.fill(); }
   }
-  for (const y of [-6.6, 6.6]) { g.fillStyle = '#fffbe6'; g.beginPath(); g.ellipse(L.nose - 0.3, y*(m === 'proto' ? 0.55 : 1), 1.1, 2.2, 0, 0, 7); g.fill(); }
-  g.fillStyle = '#6b1410'; g.fillRect(L.tail, -hw + 2.5, 1.4, 3.2); g.fillRect(L.tail, hw - 5.7, 1.4, 3.2);
+  for (const y of [-6.6, 6.6]) { const hy = y*(m === 'proto' ? 0.55 : 1);
+    g.fillStyle = '#1b1d22'; g.beginPath(); g.ellipse(L.nose - 0.5, hy, 1.6, 2.7, 0, 0, 7); g.fill();
+    g.fillStyle = '#fffbe6'; g.beginPath(); g.ellipse(L.nose - 0.3, hy, 1.1, 2.2, 0, 0, 7); g.fill();
+    g.fillStyle = '#ffffff'; g.beginPath(); g.ellipse(L.nose - 0.1, hy - 0.5, 0.45, 0.9, 0, 0, 7); g.fill(); }
+  g.fillStyle = '#3a0c0a'; g.fillRect(L.tail - 0.2, -hw + 2.1, 1.9, 4); g.fillRect(L.tail - 0.2, hw - 6.1, 1.9, 4);
+  g.fillStyle = '#a81c14'; g.fillRect(L.tail, -hw + 2.5, 1.4, 3.2); g.fillRect(L.tail, hw - 5.7, 1.4, 3.2);
+  g.fillStyle = 'rgba(255,150,130,.55)'; g.fillRect(L.tail + 0.2, -hw + 2.8, 0.5, 2.6); g.fillRect(L.tail + 0.2, hw - 5.4, 0.5, 2.6);
   bodyPathM(g, m); g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 0.5; g.stroke();
   return c;
 }
@@ -1870,11 +1891,31 @@ function puff(r, g_, b) {
   gr.addColorStop(0, `rgba(${r},${g_},${b},1)`); gr.addColorStop(0.5, `rgba(${r},${g_},${b},.5)`); gr.addColorStop(1, `rgba(${r},${g_},${b},0)`);
   g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return c;
 }
+// humo con volumen: varios manchones desparejos con luz de un lado y sombra del otro (3 formas por tono)
+function puffCloud(r, g_, b, seed) {
+  const c = mkCanvas(96, 96), g = c.getContext('2d'), R = srand(seed);
+  for (let i = 0; i < 7; i++) {
+    const a = R()*6.283, d = i ? 8 + R()*16 : 0, x = 48 + Math.cos(a)*d, y = 48 + Math.sin(a)*d, rad = Math.min(i ? 14 + R()*14 : 27, 46 - d), gr = g.createRadialGradient(x, y, 0, x, y, rad);
+    gr.addColorStop(0, `rgba(${r},${g_},${b},.5)`); gr.addColorStop(0.55, `rgba(${r},${g_},${b},.2)`); gr.addColorStop(1, `rgba(${r},${g_},${b},0)`); g.fillStyle = gr; g.fillRect(0, 0, 96, 96);
+  }
+  g.globalCompositeOperation = 'source-atop';
+  const sh = g.createLinearGradient(22, 22, 78, 78); sh.addColorStop(0, 'rgba(255,255,255,.22)'); sh.addColorStop(0.5, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(30,36,52,.34)');
+  g.fillStyle = sh; g.fillRect(0, 0, 96, 96);
+  return c;
+}
+const SMOKE_SETS = {};
+function smokeSet() {   // el humo toma el color de la luz: blanco de día, cálido al atardecer, gris con lluvia, apagado de noche
+  const k = WX.night ? 'n' : WX.dusk ? 't' : WX.skyK > 0.5 ? 'g' : 'd';
+  if (!SMOKE_SETS[k]) { const c = { n: [122, 132, 156], t: [246, 216, 190], g: [198, 204, 214], d: [238, 236, 230] }[k]; SMOKE_SETS[k] = [0, 1, 2].map(i => puffCloud(c[0], c[1], c[2], 50 + i)); }
+  return SMOKE_SETS[k];
+}
+const puffMist = puff(204, 214, 230);
+let partN = 0;
 const puffSmoke = puff(232, 232, 228), puffDust = puff(150, 122, 78), puffGlowRed = puff(255, 40, 20), puffGlowWarm = puff(255, 200, 120);
 const cloudSpr = (function () {
   const c = mkCanvas(256, 256), g = c.getContext('2d'), R = srand(31);
   for (let i = 0; i < 9; i++) {
-    const x = 70 + R()*116, y = 70 + R()*116, r = 40 + R()*50, gr = g.createRadialGradient(x, y, 0, x, y, r);
+    const x = 70 + R()*116, y = 70 + R()*116, r = Math.min(40 + R()*50, x - 3, 253 - x, y - 3, 253 - y), gr = g.createRadialGradient(x, y, 0, x, y, r);
     gr.addColorStop(0, 'rgba(0,0,0,.5)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
   }
   return c;
@@ -2339,7 +2380,7 @@ function addSkid(x1, y1, x2, y2, type) {
 }
 function part(x, y, vx, vy, life, size, col, grow) {
   if (parts.length > (MAXQ ? 900 : 360)) parts.shift();
-  parts.push({ x, y, vx, vy, life, max: life, size, col, grow });
+  parts.push({ x, y, vx, vy, life, max: life, size, col, grow, k: partN++ % 3 });
 }
 function popup(txt, col, big) { popups.push({ txt, col, big: !!big, t: 0 }); if (popups.length > 4) popups.shift(); if (sayOK()) try { sayPopup(txt); } catch(e) {} }
 function nearCam(x, y, r) { return Math.abs(x - cam.x) < r && Math.abs(y - cam.y) < r; }
@@ -3091,7 +3132,9 @@ function render() {
   for (const c of cars) {
     if (!nearCam(c.wx, c.wy, R)) continue;
     if (BRIDGE && carLevel(c)) continue;
-    const bo = bodyOff(c), ah = airH(c), so = 5 + ah*60; ctx.save(); ctx.globalAlpha = 0.8*(1 - ah*0.45); ctx.translate(c.wx + SUN.x*so - bo[0]*0.8, c.wy + SUN.y*so - bo[1]*0.8); ctx.rotate(c.va); ctx.scale(1 - ah*0.12, 1 - ah*0.12); ctx.drawImage(carShadowFor(c.model), -30, -18, 60, 36); ctx.restore();
+    const bo = bodyOff(c), ah = airH(c), so = 6.5 + ah*60;
+    if (ah < 0.03) { ctx.save(); ctx.globalAlpha = 0.55; ctx.translate(c.wx + SUN.x*1.1, c.wy + SUN.y*1.1); ctx.rotate(c.va); ctx.drawImage(carShadowFor(c.model), -30, -18, 60, 36); ctx.restore(); }   // sombra de contacto: pega el auto al piso
+    ctx.save(); ctx.globalAlpha = 0.62*(1 - ah*0.45); ctx.translate(c.wx + SUN.x*so - bo[0]*0.8, c.wy + SUN.y*so - bo[1]*0.8); ctx.rotate(c.va); ctx.scale(1 - ah*0.12, 1 - ah*0.12); ctx.drawImage(carShadowFor(c.model), -30, -18, 60, 36); ctx.restore();
   }
   ctx.globalAlpha = 1;
 
@@ -3231,11 +3274,21 @@ function drawNight(R) {
 }
 /* ---------- Atardecer, cielo nublado, lluvia en pantalla y relámpagos ---------- */
 const rainDrops = [];
+let gradeW = 0, gradeH = 0, gradeDay = null, gradeDusk = null;
 function drawWeatherOverlay() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (gradeW !== W || gradeH !== H) {
+    gradeW = W; gradeH = H;
+    gradeDusk = ctx.createLinearGradient(0, 0, W*0.4, H); gradeDusk.addColorStop(0, 'rgba(255,140,60,.36)'); gradeDusk.addColorStop(1, 'rgba(120,70,150,.26)');
+    gradeDay = ctx.createLinearGradient(0, 0, W*0.55, H); gradeDay.addColorStop(0, 'rgba(255,240,205,.42)'); gradeDay.addColorStop(0.5, 'rgba(255,240,215,.10)'); gradeDay.addColorStop(1, 'rgba(46,70,120,.36)');
+  }
+  // de día: sol cálido de un lado y sombra fría del otro, con más contraste
+  if (!WX.dusk && !WX.night && FXL >= 2 && WX.skyK < 0.6) {
+    ctx.globalCompositeOperation = 'soft-light'; ctx.globalAlpha = 1 - WX.skyK/0.6; ctx.fillStyle = gradeDay; ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  }
   if (WX.dusk) {
-    const g = ctx.createLinearGradient(0, 0, W*0.4, H);
-    g.addColorStop(0, 'rgba(255,140,60,.36)'); g.addColorStop(1, 'rgba(120,70,150,.26)');
+    const g = gradeDusk;
     ctx.globalCompositeOperation = 'soft-light'; ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = 'rgba(255,150,80,.08)'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = 'rgba(40,20,45,.07)'; ctx.fillRect(0, 0, W, H);
   }
@@ -3266,16 +3319,17 @@ function drawWeatherOverlay() {
   if (flash > 0.02) { ctx.fillStyle = `rgba(225,232,255,${(flash*0.65).toFixed(3)})`; ctx.fillRect(0, 0, W, H); }
 }
 function bodyOff(c) {   // pseudo 3D: la carrocería se corre sobre la suspensión
-  const fx = Math.cos(c.va), fy = Math.sin(c.va), p = -(c.vp || 0)*1.6, r = -(c.vr || 0)*1.6;
+  const fx = Math.cos(c.va), fy = Math.sin(c.va), p = -(c.vp || 0)*2.1, r = -(c.vr || 0)*2.1;
   return [fx*p - fy*r, fy*p + fx*r];
 }
 function drawParts(low) {
+  const SM = smokeSet();
   for (const p of parts) {
     const a = p.life/p.max;
     if (p.col === 'mist') {
       if (!low) continue;
-      const s = p.size*2.0; ctx.globalAlpha = a*(WX.night ? 0.09 : 0.15);
-      ctx.drawImage(puffSmoke, p.x - s, p.y - s, s*2, s*2); continue;
+      const s = p.size*2.0; ctx.globalAlpha = a*Math.min(1, (1 - a)*6 + 0.2)*(WX.night ? 0.09 : 0.13);
+      ctx.drawImage(puffMist, p.x - s, p.y - s, s*2, s*2); continue;
     }
     if (p.col === 'flame') {
       if (low) continue;
@@ -3289,9 +3343,9 @@ function drawParts(low) {
     if (p.grow) {
       const tint = p.col.charCodeAt(0) === 84, dust = !tint && p.col.indexOf('120') >= 0;
       if (low !== dust) continue;
-      const s = p.size*2.2;
-      ctx.globalAlpha = a*(dust ? 0.55 : tint ? 0.62 : 0.5);
-      ctx.drawImage(tint ? tintPuff(p.col.slice(1)) : dust ? puffDust : puffSmoke, p.x - s, p.y - s, s*2, s*2);
+      const s = p.size*(tint || dust ? 2.2 : 2.5), fade = a*Math.min(1, (1 - a)*7 + 0.15);   // aparece de a poco en vez de nacer opaco
+      ctx.globalAlpha = fade*(dust ? 0.55 : tint ? 0.55 : 0.4);
+      ctx.drawImage(tint ? tintPuff(p.col.slice(1)) : dust ? puffDust : SM[p.k || 0], p.x - s, p.y - s, s*2, s*2);
     } else if (p.col === 'stone') {
       if (low) continue; ctx.globalAlpha = a; ctx.fillStyle = '#4b443a'; ctx.fillRect(p.x - p.size/2, p.y - p.size/2, p.size, p.size);
     } else if (!low) {
