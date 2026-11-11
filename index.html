@@ -603,7 +603,7 @@ function worldPos(s, d, o) { sample(s, o); o.wx = o.x - o.ty*d; o.wy = o.y + o.t
 /* =====================================================================
    CANVAS / ESCALA
    ===================================================================== */
-const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const cv = document.getElementById('c'), ctx = cv.getContext('2d', { alpha: false }) || cv.getContext('2d');
 let W = 0, H = 0, DPR = 1, QUAL = 0;
 function qualSave() { try { localStorage.setItem('driftloop_ql', QUAL + '|' + Date.now()); } catch(e) {} }
 // Calidad: 'auto' (por defecto) mira el equipo y se va ajustando sola · 'maxima' y 'ahorro' solo si el jugador las elige
@@ -618,7 +618,7 @@ const QCAP = MAXQ ? [3, 2, 1.5, 1] : ECO ? [1.25, 1, 1, 0.75] : [2, 1.5, 1, 0.75
 function resize() {
   const vw = innerWidth, vh = innerHeight;
   W = vw > vh ? Math.round(vh*0.6) : vw; H = vh;   // en escritorio simula un celular vertical
-  DPR = Math.min(QCAP[QUAL], devicePixelRatio || 1);
+  DPR = Math.min(QCAP[QUAL], devicePixelRatio || 1, Math.sqrt((MAXQ ? 2.0e6 : 1.5e6)/Math.max(1, W*H)));   // tope de píxeles totales
   cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
   cv.style.width = W+'px'; cv.style.height = H+'px';
 }
@@ -1444,9 +1444,9 @@ const decor = { boards: [], paints: [], tents: [], fans: [], posts: [], cars: []
 })();
 /* --------- Horneado de tiles --------- */
 const TS = 512, TM = 2;                       // tamaño de tile en el mundo y margen anti-costuras
-let TSC = QUAL >= 3 ? 0.8 : QUAL >= 2 ? (MAXQ ? 1.25 : 0.9) : MAXQ ? 2 : 1.25;                               // resolución de los tiles (px por unidad de mundo)
+let TSC = QUAL >= 3 ? 0.8 : QUAL >= 2 ? (MAXQ ? 1.25 : 0.9) : MAXQ ? 1.5 : 1.25;                               // resolución de los tiles (px por unidad de mundo)
 const tiles = new Map(), queued = new Set(); let bakeQueue = [], frameNo = 0;
-const MAX_TILES = MAXQ ? 44 : 34, tilePool = [];
+const MAX_TILES = MAXQ ? 38 : 34, tilePool = [];
 let tilesBroken = false;
 const gridSlots = [];
 for (let i = 0; i < 12; i++) gridSlots.push([-40 - Math.floor(i/2)*62 + 24, i % 2 ? 30 : -30]);
@@ -2682,7 +2682,7 @@ function addSkid(x1, y1, x2, y2, type) {
   skHead = (skHead+1) % SK_MAX; if (skN < SK_MAX) skN++;
 }
 function part(x, y, vx, vy, life, size, col, grow) {
-  if (parts.length > (QUAL >= 2 ? 180 : MAXQ ? 900 : 360)) parts.shift();
+  if (parts.length > (QUAL >= 2 ? 180 : MAXQ ? 520 : 360)) parts.shift();
   parts.push({ x, y, vx, vy, life, max: life, size, col, grow, k: partN++ % 3 });
 }
 function popup(txt, col, big) { popups.push({ txt, col, big: !!big, t: 0 }); if (popups.length > 4) popups.shift(); if (sayOK()) try { sayPopup(txt); } catch(e) {} }
@@ -3779,8 +3779,8 @@ function drawLights() {
     else if (green) { label = '¡YA!'; ph = stateT; col = '#3dff6e'; }
     if (label) {
       const s = ph < 0.16 ? 2.4 - ph/0.16*1.4 : 1, a = Math.min(1, ph/0.08)*(ph > 0.75 ? Math.max(0, 1 - (ph - 0.75)/0.25) : 1);
-      ctx.save(); ctx.globalAlpha = a; ctx.translate(W/2, H*0.34); ctx.scale(s, s); ctx.shadowColor = col; ctx.shadowBlur = 30;
-      txt(label, 0, 34, 104, '#fff', 'center', false, 'italic 800'); ctx.shadowBlur = 0;
+      ctx.save(); ctx.globalAlpha = a; ctx.translate(W/2, H*0.34); ctx.scale(s, s);
+      ctx.save(); ctx.globalAlpha = a*0.35; ctx.translate(0, 34); ctx.scale(1.07, 1.07); txt(label, 0, 2, 104, col, 'center', false, 'italic 800'); ctx.restore();
       txt(label, 0, 34, 104, col, 'center', false, 'italic 800'); ctx.globalAlpha = a*0.9; txt(label, -2, 31, 104, '#fff', 'center', false, 'italic 800');
       ctx.restore();
       if (ph < 0.1) shake = Math.max(shake, 3);
@@ -3795,8 +3795,8 @@ function para(x, y, w, h, sk, fill) {
 }
 function glassG(y, h, a) { const g = ctx.createLinearGradient(0, y, 0, y + h); g.addColorStop(0, `rgba(30,34,44,${a || 0.88})`); g.addColorStop(1, `rgba(6,8,12,${a || 0.88})`); return g; }
 function hudBlock(x, y, w, h, accent) {
-  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = 10; ctx.shadowOffsetY = 3;
-  para(x, y, w, h, 7, glassG(y, h)); ctx.restore();
+  para(x + 1, y + 3, w, h, 7, 'rgba(0,0,0,.3)');   // sombra simple (la difuminada costaba mucho en cada cuadro)
+  para(x, y, w, h, 7, glassG(y, h));
   ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = 1; ctx.stroke();
   if (accent) para(x - 2, y, 5, h, 7, accent);
 }
@@ -3808,7 +3808,8 @@ function drawTach() {
   const cx = W - 76, cy = H - 80, R = 60;
   const dg = ctx.createRadialGradient(cx, cy - 14, 6, cx, cy, R + 8);
   dg.addColorStop(0, 'rgba(40,45,56,.94)'); dg.addColorStop(1, 'rgba(5,7,10,.94)');
-  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 14; ctx.fillStyle = dg; ctx.beginPath(); ctx.arc(cx, cy, R + 8, 0, 7); ctx.fill(); ctx.restore();
+  ctx.fillStyle = 'rgba(0,0,0,.26)'; ctx.beginPath(); ctx.arc(cx, cy + 2, R + 11, 0, 7); ctx.fill();
+  ctx.fillStyle = dg; ctx.beginPath(); ctx.arc(cx, cy, R + 8, 0, 7); ctx.fill();
   ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(cx, cy, R + 8, 0, 7); ctx.stroke();
   const a0 = Math.PI*0.75, sw = Math.PI*1.5, maxR = 9000, ang = r => a0 + sw*Math.max(0, Math.min(1, r/maxR));
   ctx.lineWidth = 7; ctx.strokeStyle = 'rgba(225,37,27,.9)'; ctx.beginPath(); ctx.arc(cx, cy, R - 4, ang(7600), ang(9000)); ctx.stroke();
@@ -3827,7 +3828,8 @@ function drawTach() {
   // aguja
   const live = state === 'race' || state === 'countdown' || state === 'finish';
   const rpm = live ? ENG.rpm : 900;
-  ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang(rpm)); ctx.shadowColor = 'rgba(255,60,40,.9)'; ctx.shadowBlur = 8;
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang(rpm));
+  ctx.strokeStyle = 'rgba(255,60,40,.3)'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(R - 9, 0); ctx.stroke();
   ctx.fillStyle = '#ff3b2a'; ctx.beginPath(); ctx.moveTo(-8, -2.4); ctx.lineTo(R - 7, -0.8); ctx.lineTo(R - 7, 0.8); ctx.lineTo(-8, 2.4); ctx.closePath(); ctx.fill(); ctx.restore();
   ctx.fillStyle = '#1a1d24'; ctx.beginPath(); ctx.arc(cx, cy, 7, 0, 7); ctx.fill(); ctx.strokeStyle = '#ff3b2a'; ctx.lineWidth = 2; ctx.stroke();
   // marcha y velocidad
@@ -3853,7 +3855,7 @@ function drawRaceHUD() {
   // Posición
   hudBlock(12, 10, 96, 62, player.pos === 1 ? '#ffd23f' : '#e1251b');
   txt('POS', 24, 27, 12, '#9aa3ad', 'left', false, '700');
-  if (player.pos === 1) { ctx.save(); ctx.shadowColor = 'rgba(255,210,63,.8)'; ctx.shadowBlur = 14; }
+  if (player.pos === 1) ctx.save();
   txt(String(player.pos), 22, 66, 46, player.pos === 1 ? '#ffd23f' : '#fff', 'left', false, 'italic 800');
   if (player.pos === 1) ctx.restore();
   ctx.font = `italic 800 46px ${FONT}`; const pw = ctx.measureText(String(player.pos)).width;
@@ -7630,9 +7632,9 @@ function frame(now) {
       const avg = perfAcc/perfN - (ECO ? 0.0167 : 0), strict = QSET !== 'maxima', bad = avg > 0.033;   // en Ahorro (30 cuadros) se descuenta la espera propia
       const qDown = n => { QUAL = Math.min(3, QUAL + n); if (AUTOQ) qualSave(); resize(); postCanvas = null; const t = QUAL >= 3 ? 0.8 : MAXQ ? 1.25 : 0.9; if (QUAL >= 2 && TSC > t) { TSC = t; clearTiles(); } };
       if (LOCK30) { /* ya está en lo mínimo */ }
-      else if (bad && strict) { while (fxDown()) {} if (QUAL < 3) qDown(avg > 0.05 ? 2 : 1); else LOCK30 = true; }   // va a los tirones: baja todo de una
-      else if (avg > (strict ? 0.019 : 0.022) && fxDown()) { /* primero se apagan efectos */ }
-      else if (avg > (strict ? 0.0205 : 0.045) && QUAL < (strict ? 3 : 2)) qDown(1);
+      else if (bad) { while (fxDown()) {} if (QUAL < 3) qDown(avg > 0.05 ? 2 : 1); else LOCK30 = true; }   // va a los tirones: baja todo de una
+      else if (avg > (strict ? 0.019 : 0.021) && fxDown()) { /* primero se apagan efectos */ }
+      else if (avg > (strict ? 0.0205 : 0.024) && QUAL < (strict ? 3 : 2)) qDown(1);
       perfAcc = 0; perfN = 0;
     }
   }
