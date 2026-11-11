@@ -1324,6 +1324,97 @@ const VMAP = (function () {
   }
   return { c, sc, x0, y0 };
 })();
+/* =====================================================================
+   ENTORNO: carteles, publicidad pintada en el pasto, carpas, público, banderilleros, boxes, estacionamiento
+   y desgaste del asfalto (parches y grietas). Todo se hornea en los tiles: no cuesta nada por cuadro.
+   Es solo decorado: queda detrás de las gomas o pintado en el piso, no cambia la pista ni los choques.
+   ===================================================================== */
+const decor = { boards: [], paints: [], tents: [], fans: [], posts: [], cars: [], pit: null, lot: null, patches: [], cracks: [] };
+(function () {
+  const o = {}, R = srand(TRACK_KEY.length*131 + TR.N), clear = [];
+  const BR = [['DRIFT LOOP', '#c8201a', '#ffffff'], ['TURBO', '#f2c200', '#111111'], ['NITRO+', '#1f5fbf', '#ffffff'], ['APEX', '#15171a', '#f2c200'], ['PISTÓN', '#f2f2ee', '#c8201a'],
+              ['V8 CLUB', '#14452f', '#ffffff'], ['GOMA', '#ff7a00', '#111111'], ['RPM', '#5b2a86', '#ffffff']];
+  const COLS = ['#d93a2b', '#f2f2f2', '#1f5fbf', '#f2c200', '#2b2b2b', '#e86f1c', '#7a3fb8', '#3aa35b', '#e8a0b0', '#9fd0f0'];
+  const own = (s, d) => { worldPos(s, d, o); return trackDist(o.wx, o.wy) > Math.abs(d) - 8; };   // ¿no hay otro tramo de pista más cerca?
+  const quad = (sa, sb, da, db) => { const p = new Path2D(); for (let s = sa; s <= sb; s += 10) { worldPos(s, da, o); s === sa ? p.moveTo(o.wx, o.wy) : p.lineTo(o.wx, o.wy); } for (let s = sb; s >= sa; s -= 10) { worldPos(s, db, o); p.lineTo(o.wx, o.wy); } p.closePath(); return p; };
+  const bbOf = (sa, sb, da, db) => { let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (let s = sa; s <= sb; s += 20) for (const d of [da, db]) { worldPos(s, d, o); x0 = Math.min(x0, o.wx); x1 = Math.max(x1, o.wx); y0 = Math.min(y0, o.wy); y1 = Math.max(y1, o.wy); } return [x0 - 40, y0 - 40, x1 + 40, y1 + 40]; };
+
+  // ---- boxes: del lado opuesto a la tribuna, si hay lugar ----
+  { const sd = 1; let best = null, a = -1;
+    for (let s = 170; s <= 900; s += 10) { const ok = s < 890 && own(s, sd*(WALL + 60)) && own(s, sd*(WALL + 116)); if (ok && a < 0) a = s; if (!ok && a >= 0) { if (!best || s - a > best[1] - best[0]) best = [a, s - 10]; a = -1; } }
+    if (best && best[1] - best[0] >= 240) {
+      const s0 = best[0], s1 = s0 + Math.floor((best[1] - s0)/56)*56, P = { s0, s1, boxes: [], ac: [] };
+      P.apron = quad(s0 - 14, s1 + 14, sd*(WALL + 20), sd*(WALL + 114)); P.roof = quad(s0, s1, sd*(WALL + 58), sd*(WALL + 106)); P.lane = quad(s0 - 14, s1 + 14, sd*(WALL + 36), sd*(WALL + 37.5));
+      P.bb = bbOf(s0 - 14, s1 + 14, sd*(WALL + 16), sd*(WALL + 120));
+      for (let s = s0, i = 0; s < s1 - 1; s += 56, i++) {
+        P.boxes.push({ awn: quad(s + 3, s + 53, sd*(WALL + 49), sd*(WALL + 58)), door: quad(s + 8, s + 48, sd*(WALL + 57), sd*(WALL + 60)), col: COLS[(i*3 + 1) % COLS.length] });
+        worldPos(s + 16 + R()*24, sd*(WALL + 78 + R()*18), o); P.ac.push({ x: o.wx, y: o.wy, ang: o.ang });
+        worldPos(s, sd*(WALL + 58), o); const ax = o.wx, ay = o.wy; worldPos(s, sd*(WALL + 106), o); P.boxes[i].div = [ax, ay, o.wx, o.wy];
+      }
+      for (let s = s0; s <= s1; s += 30) { worldPos(s, sd*(WALL + 70), o); clear.push({ x: o.wx, y: o.wy, r: 66 }); }
+      decor.pit = P;
+    }
+  }
+  // ---- estacionamiento detrás de la tribuna ----
+  { let ok = true; for (let s = 180; s <= 870 && ok; s += 30) ok = own(s, -(WALL + 166)) && own(s, -(WALL + 272));
+    if (ok) {
+      const Lt = { pave: quad(176, 874, -(WALL + 160), -(WALL + 276)), bb: bbOf(176, 874, -(WALL + 156), -(WALL + 280)) };
+      const CC = ['#d7d9dc', '#1b1d21', '#8e949b', '#b3261e', '#1f4f9a', '#e9e9e4', '#3a3d42', '#2f6b3f', '#c9a227'];
+      for (const d of [176, 198, 236, 258]) for (let s = 184; s < 868; s += 9.5) { if (R() < 0.22) continue; worldPos(s, -(WALL + d), o); decor.cars.push({ x: o.wx, y: o.wy, ang: o.ang + Math.PI/2, c: CC[(R()*CC.length)|0] }); }
+      for (let s = 180; s <= 870; s += 30) { worldPos(s, -(WALL + 218), o); clear.push({ x: o.wx, y: o.wy, r: 74 }); }
+      decor.lot = Lt;
+    }
+  }
+  const blocked = (x, y, m) => clear.some(c => Math.hypot(c.x - x, c.y - y) < c.r + m);
+  const free = (x, y, m) => trackDist(x, y) > WALL + m && !inStandBB(x, y, 14) && !blocked(x, y, 6);
+
+  // ---- carteles detrás de las gomas, en tandas ----
+  for (const side of [-1, 1]) { let run = 0, gap = 1 + (R()*3|0), br = (R()*BR.length)|0;
+    for (let s = 50 + (side > 0 ? 30 : 0); s < TR.L - 40; s += 60) {
+      if (run <= 0) { if (--gap > 0) continue; run = 3 + (R()*4|0); gap = 3 + (R()*5|0); br = (R()*BR.length)|0; }
+      run--; sample(s, o); if (Math.abs(o.k) > 1/380 && Math.sign(o.k) === side) continue;   // del lado de adentro de una curva cerrada se enciman
+      worldPos(s, side*(WALL + 23), o); if (!free(o.wx, o.wy, 18) || lamps.some(l => Math.hypot(l.x - o.wx, l.y - o.wy) < 36)) continue;
+      const b = BR[(br + (run % 2)) % BR.length]; decor.boards.push({ x: o.wx, y: o.wy, ang: o.ang, side, t: b[0], bg: b[1], fg: b[2] });
+    }
+  }
+  // ---- publicidad pintada en el pasto de las rectas (se pisa: es pintura) ----
+  { let side = 1, lastS = -999;
+    for (let s = 230; s < TR.L - 200; s += 40) {
+      if (s - lastS < 620 || decor.paints.length >= 6) continue;
+      let ok = true; for (let ds = -130; ds <= 130 && ok; ds += 26) { sample(mod(s + ds), o); ok = Math.abs(o.k) < 1/1300; }
+      if (!ok) continue;
+      side = -side; worldPos(s, side*(HALF_W + 60), o); if (trackDist(o.wx, o.wy) < HALF_W + 50) continue;
+      const b = BR[(R()*BR.length)|0]; decor.paints.push({ x: o.wx, y: o.wy, ang: o.ang, side, t: b[0], c: b[1] === '#f2f2ee' || b[1] === '#15171a' ? '#c8201a' : b[1] }); lastS = s;
+    }
+  }
+  // ---- banderilleros en la entrada de cada curva (lado de afuera) ----
+  for (const cn of corners) { const s = cn.i0*TR.step + 20, side = -cn.sg; worldPos(s, side*(WALL + 26), o); if (!free(o.wx, o.wy, 20) || decor.boards.some(b => Math.hypot(b.x - o.wx, b.y - o.wy) < 40)) continue; decor.posts.push({ x: o.wx, y: o.wy, ang: o.ang, side }); clear.push({ x: o.wx, y: o.wy, r: 14 }); }
+  // ---- carpas y grupos de público ----
+  { let tries = 0;
+    while (decor.tents.length < 16 && tries++ < 400) {
+      const s = R()*TR.L, side = R() < 0.5 ? -1 : 1, d = WALL + 52 + R()*95; worldPos(s, side*d, o);
+      if (!free(o.wx, o.wy, 44) || decor.tents.some(t => Math.hypot(t.x - o.wx, t.y - o.wy) < 46)) continue;
+      const t = { x: o.wx, y: o.wy, rot: o.ang + (R() - 0.5)*0.5, h: 11 + R()*5, c: hexRGB(COLS[(R()*COLS.length)|0]), st: R() < 0.5 };
+      decor.tents.push(t);
+      for (let i = 0, n = 6 + (R()*9|0); i < n; i++) { const a = R()*6.283, rr = t.h*1.5 + 4 + R()*16, x = t.x + Math.cos(a)*rr, y = t.y + Math.sin(a)*rr; if (trackDist(x, y) > WALL + 22) decor.fans.push({ x, y, c: COLS[(R()*COLS.length)|0] }); }
+    }
+    for (let s = 120; s < TR.L - 60; s += 150 + R()*190) {   // gente contra el alambrado
+      const side = R() < 0.5 ? -1 : 1, n = 6 + (R()*10|0), d = WALL + 32 + R()*8;
+      for (let i = 0; i < n; i++) for (let r = 0; r < 2; r++) { if (R() < 0.3) continue; worldPos(s + i*5.6 + (R() - 0.5)*2, side*(d + r*6.5), o); if (free(o.wx, o.wy, 24)) decor.fans.push({ x: o.wx, y: o.wy, c: COLS[(R()*COLS.length)|0] }); }
+    }
+    for (const t of decor.tents) clear.push({ x: t.x, y: t.y, r: t.h*1.5 });
+  }
+  for (const b of decor.boards) clear.push({ x: b.x, y: b.y, r: 26 });
+  // los árboles y rocas que quedaron encima de algo se sacan
+  for (const arr of [trees, rocks]) for (let i = arr.length - 1; i >= 0; i--) { const t = arr[i]; if (clear.some(c => Math.hypot(c.x - t.x, c.y - t.y) < c.r + (t.r || 8)*1.2)) arr.splice(i, 1); }
+  // ---- asfalto con historia: parches de reparación y grietas ----
+  for (let s = 90; s < TR.L - 40; s += 110 + R()*190) { worldPos(s, (R() - 0.5)*2*(HALF_W - 28), o); decor.patches.push({ x: o.wx, y: o.wy, ang: o.ang + (R() - 0.5)*0.08, len: 26 + R()*62, wid: 12 + R()*18, dark: R() < 0.7 }); }
+  for (let s = 60; s < TR.L - 40; s += 80 + R()*150) {
+    let d = (R() - 0.5)*2*(HALF_W - 14), ss = s; const pts = [];
+    for (let i = 0, n = 5 + (R()*5|0); i < n; i++) { worldPos(ss, Math.max(-HALF_W + 8, Math.min(HALF_W - 8, d)), o); pts.push([o.wx, o.wy]); ss += 6 + R()*9; d += (R() - 0.5)*14; }
+    decor.cracks.push(pts);
+  }
+})();
 /* --------- Horneado de tiles --------- */
 const TS = 512, TM = 2;                       // tamaño de tile en el mundo y margen anti-costuras
 let TSC = MAXQ ? 2 : 1.25;                               // resolución de los tiles (px por unidad de mundo)
@@ -1371,6 +1462,12 @@ function bakeTile(ti, tj) {
     g.lineWidth = 100; g.strokeStyle = gravelP; g.stroke(cn.gravel);
     if (WX.bakeWet) { g.strokeStyle = 'rgba(30,24,14,.3)'; g.stroke(cn.gravel); }
   }
+  const nearPt = (x, y, m) => x + m > x0 && x - m < x1 && y + m > y0 && y - m < y1;
+  for (const pt of decor.paints) { if (!nearPt(pt.x, pt.y, 170)) continue;
+    g.save(); g.translate(pt.x, pt.y); g.rotate(pt.ang + (pt.side > 0 ? Math.PI : 0)); g.globalAlpha = WX.bakeWet ? 0.4 : 0.55;
+    g.font = 'italic 800 44px ' + FONT; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const tw = g.measureText(pt.t).width; g.fillStyle = pt.c; g.fillRect(-tw/2 - 14, -30, tw + 28, 60);
+    g.fillStyle = '#f6f6f0'; g.fillRect(-tw/2 - 14, -30, tw + 28, 4); g.fillRect(-tw/2 - 14, 26, tw + 28, 4); g.fillText(pt.t, 0, 2); g.restore(); }
   if (hasTrack) {
   // Oclusión ambiental junto a la barrera
   g.lineWidth = WALL*2 + 46; g.strokeStyle = 'rgba(20,30,10,.10)'; g.stroke(tp);
@@ -1399,6 +1496,12 @@ function bakeTile(ti, tj) {
   g.lineWidth = HALF_W*2; g.strokeStyle = pat(texAsphalt); g.stroke(tp);
   g.lineWidth = HALF_W*2; g.strokeStyle = 'rgba(0,0,0,.06)'; g.stroke(tp);
   if (WX.bakeWet) { g.strokeStyle = 'rgba(4,10,20,.32)'; g.stroke(tp); g.lineWidth = HALF_W*1.4; g.strokeStyle = 'rgba(160,185,220,.05)'; g.stroke(tp); }
+  // Parches de reparación y grietas
+  for (const pa of decor.patches) { if (!nearPt(pa.x, pa.y, 60)) continue;
+    g.save(); g.translate(pa.x, pa.y); g.rotate(pa.ang); g.fillStyle = pa.dark ? 'rgba(0,0,0,.085)' : 'rgba(255,255,255,.04)'; g.fillRect(-pa.len/2, -pa.wid/2, pa.len, pa.wid);
+    g.strokeStyle = 'rgba(0,0,0,.17)'; g.lineWidth = 0.9; g.strokeRect(-pa.len/2, -pa.wid/2, pa.len, pa.wid); g.restore(); }
+  g.strokeStyle = 'rgba(0,0,0,.24)'; g.lineWidth = 0.8;
+  for (const cr of decor.cracks) { if (!nearPt(cr[0][0], cr[0][1], 90)) continue; g.beginPath(); cr.forEach((q, i) => i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])); g.stroke(); }
   // Goma de la trazada
   for (const [w, a] of [[46, 0.05], [30, 0.07], [16, 0.07]]) { g.lineWidth = w; g.strokeStyle = `rgba(8,8,10,${a})`; g.stroke(rubberPath); }
   // Marcas viejas de frenada
@@ -1459,6 +1562,45 @@ function bakeTile(ti, tj) {
     g.fillStyle = rg; g.fill(stand.roof);
     g.strokeStyle = 'rgba(0,0,0,.15)'; g.lineWidth = 1; g.stroke(stand.roof);
   }
+
+  // Estacionamiento
+  if (decor.lot && near(decor.lot.bb)) {
+    g.fillStyle = WX.bakeWet ? '#4c5056' : '#63676c'; g.fill(decor.lot.pave); g.strokeStyle = 'rgba(0,0,0,.25)'; g.lineWidth = 2; g.stroke(decor.lot.pave);
+    for (const c of decor.cars) { if (!nearPt(c.x, c.y, 12)) continue;
+      g.save(); g.translate(c.x + SUN.x*1.6, c.y + SUN.y*1.6); g.rotate(c.ang); g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(-6, -3.1, 12, 6.2); g.restore();
+      g.save(); g.translate(c.x, c.y); g.rotate(c.ang); g.fillStyle = c.c; g.fillRect(-5.6, -2.8, 11.2, 5.6); g.fillStyle = 'rgba(20,28,40,.85)'; g.fillRect(-0.6, -2.3, 3, 4.6); g.fillRect(-4, -2.2, 1.6, 4.4);
+      g.fillStyle = 'rgba(255,255,255,.22)'; g.fillRect(-5.6, -2.8, 11.2, 1.1); g.restore(); }
+  }
+  // Boxes: playón, calle de boxes, toldos de cada equipo y techo
+  if (decor.pit && near(decor.pit.bb)) { const P = decor.pit;
+    g.fillStyle = WX.bakeWet ? '#6c7076' : '#8d9095'; g.fill(P.apron); g.fillStyle = 'rgba(245,245,238,.75)'; g.fill(P.lane);
+    g.save(); g.translate(SUN.x*15, SUN.y*15); g.fillStyle = 'rgba(0,0,0,.36)'; g.fill(P.roof); g.restore();
+    for (const b of P.boxes) { g.fillStyle = '#1c1e22'; g.fill(b.door); g.fillStyle = b.col; g.fill(b.awn); g.strokeStyle = 'rgba(0,0,0,.3)'; g.lineWidth = 0.8; g.stroke(b.awn); }
+    const rg = g.createLinearGradient(P.bb[0], P.bb[1], P.bb[2], P.bb[3]); rg.addColorStop(0, '#eef1f4'); rg.addColorStop(1, '#aab0b8');
+    g.fillStyle = rg; g.fill(P.roof); g.strokeStyle = 'rgba(0,0,0,.22)'; g.lineWidth = 1.2; g.stroke(P.roof);
+    g.strokeStyle = 'rgba(0,0,0,.16)'; g.lineWidth = 1; g.beginPath(); for (const b of P.boxes) { g.moveTo(b.div[0], b.div[1]); g.lineTo(b.div[2], b.div[3]); } g.stroke();
+    for (const a of P.ac) { g.save(); g.translate(a.x + SUN.x*3, a.y + SUN.y*3); g.rotate(a.ang); g.fillStyle = 'rgba(0,0,0,.3)'; g.fillRect(-5, -4, 10, 8); g.restore();
+      g.save(); g.translate(a.x, a.y); g.rotate(a.ang); g.fillStyle = '#7d848c'; g.fillRect(-5, -4, 10, 8); g.fillStyle = '#4a5058'; g.beginPath(); g.arc(0, 0, 2.6, 0, 7); g.fill(); g.restore(); }
+  }
+  // Carteles
+  for (const b of decor.boards) { if (!nearPt(b.x, b.y, 40)) continue;
+    g.save(); g.translate(b.x + SUN.x*5, b.y + SUN.y*5); g.rotate(b.ang); g.fillStyle = 'rgba(0,0,0,.32)'; g.fillRect(-27.5, -5.5, 55, 11); g.restore();
+    g.save(); g.translate(b.x, b.y); g.rotate(b.ang + (b.side > 0 ? Math.PI : 0));
+    g.fillStyle = '#25282c'; g.fillRect(-27.5, -5.8, 55, 11.6); g.fillStyle = b.bg; g.fillRect(-26.5, -4.8, 53, 9.6); g.fillStyle = 'rgba(255,255,255,.2)'; g.fillRect(-26.5, -4.8, 53, 2.2);
+    g.fillStyle = b.fg; g.font = 'italic 800 8px ' + FONT; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(b.t, 0, 0.7); g.restore(); }
+  // Puestos de banderilleros
+  for (const q of decor.posts) { if (!nearPt(q.x, q.y, 24)) continue;
+    g.save(); g.translate(q.x + SUN.x*5, q.y + SUN.y*5); g.rotate(q.ang); g.fillStyle = 'rgba(0,0,0,.32)'; g.fillRect(-8, -6.5, 16, 13); g.restore();
+    g.save(); g.translate(q.x, q.y); g.rotate(q.ang); g.fillStyle = '#e8731c'; g.fillRect(-8, -6.5, 16, 13); g.fillStyle = '#f6f3ea'; g.fillRect(-8, -1.6, 16, 3.2); g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 0.8; g.strokeRect(-8, -6.5, 16, 13);
+    g.fillStyle = '#f2c200'; g.fillRect(10, -q.side*9 - 2.5, 7, 5); g.fillStyle = '#3a3d42'; g.fillRect(9.2, -q.side*9 - 3.5, 1.2, 8); g.restore(); }
+  // Carpas
+  for (const t of decor.tents) { if (!nearPt(t.x, t.y, 34)) continue; const h = t.h;
+    g.save(); g.translate(t.x + SUN.x*8, t.y + SUN.y*8); g.rotate(t.rot); g.fillStyle = 'rgba(0,0,0,.32)'; g.fillRect(-h, -h, h*2, h*2); g.restore();
+    g.save(); g.translate(t.x, t.y); g.rotate(t.rot);
+    [[-1, -1, 1, -1, 1.18], [1, -1, 1, 1, 0.82], [1, 1, -1, 1, 0.62], [-1, 1, -1, -1, 0.96]].forEach((f, i) => { g.fillStyle = rgba(mul(t.st && i % 2 ? [244, 244, 238] : t.c, f[4]), 1); g.beginPath(); g.moveTo(0, 0); g.lineTo(f[0]*h, f[1]*h); g.lineTo(f[2]*h, f[3]*h); g.closePath(); g.fill(); });
+    g.strokeStyle = 'rgba(0,0,0,.3)'; g.lineWidth = 0.7; g.strokeRect(-h, -h, h*2, h*2); g.fillStyle = '#f4f4ee'; g.beginPath(); g.arc(0, 0, 1.3, 0, 7); g.fill(); g.restore(); }
+  // Público
+  for (const f of decor.fans) { if (!nearPt(f.x, f.y, 6)) continue; g.fillStyle = 'rgba(0,0,0,.3)'; g.beginPath(); g.arc(f.x + 1.2, f.y + 1.6, 2.5, 0, 7); g.fill(); g.fillStyle = f.c; g.beginPath(); g.arc(f.x, f.y, 2.5, 0, 7); g.fill(); g.fillStyle = 'rgba(240,200,170,.9)'; g.beginPath(); g.arc(f.x, f.y, 1.15, 0, 7); g.fill(); }
 
   // Torres de iluminación
   for (const L of lamps) {
