@@ -526,6 +526,10 @@ const DAILY = (function () {
   return res;
 })();
 if (DAILY) TRACKS.diaria = { name: DAILY.name, theme: DAILY.theme, cp: DAILY.cp, daily: true };
+// Etapas de rally: usan un trazado que ya existe, pero casi todo es tierra, grava o nieve (solo la recta de largada es asfalto)
+if (TRACKS.bosque) TRACKS.rsierra = Object.assign({}, TRACKS.bosque, { name: 'Rally de la Sierra', rally: true, surf: [[0.07, 0.3, 'tierra'], [0.3, 0.46, 'grava'], [0.46, 0.8, 'tierra'], [0.8, 0.95, 'grava']] });
+if (TRACKS.canon) TRACKS.rdesierto = Object.assign({}, TRACKS.canon, { name: 'Rally del Desierto', rally: true, surf: [[0.07, 0.36, 'grava'], [0.36, 0.62, 'tierra'], [0.62, 0.95, 'grava']] });
+if (TRACKS.nevado) TRACKS.rblanco = Object.assign({}, TRACKS.nevado, { name: 'Rally Blanco', rally: true, surf: [[0.07, 0.5, 'nieve'], [0.5, 0.62, 'tierra'], [0.62, 0.95, 'nieve']] });
 const TRACK_KEYS = Object.keys(TRACKS);
 let TRACK_KEY = 'autodromo';
 try {
@@ -1748,7 +1752,7 @@ const MODELS = {
             len: 44, wid: 22, vmax: 1.00, acc: 1.00, grip: 1.00, wt: 1.00,
             snd: { cyl: 8, cross: true, scale: 1.0, fc: 1.0, pipe: 0.52, d1: 0.0029 } },
   hatch:  { name: 'Hatch Rally', desc: 'Corto y muy ágil, dobla como un kart. Le falta punta.', price: 0,
-            hp: 260, kg: 1180, drv: '4',
+            hp: 260, kg: 1180, drv: '4', loose: 0.35,
             len: 36, wid: 20, vmax: 0.90, acc: 1.08, grip: 1.04, wt: 0.80,
             snd: { cyl: 4, cross: false, scale: 1.12, fc: 1.35, pipe: 0.45, d1: 0.0021 } },
   muscle: { name: 'Muscle V8', desc: 'Potencia bruta y mucha velocidad final. La cola se escapa fácil.', price: 2500,
@@ -1768,7 +1772,17 @@ const MODELS = {
             len: 46, wid: 23, vmax: 1.17, acc: 1.24, grip: 1.16, wt: 0.82,
             snd: { cyl: 12, cross: false, scale: 1.05, fc: 1.3, pipe: 0.5, d1: 0.0021 } }
 };
-const MODEL_KEYS = ['gt', 'hatch', 'muscle', 'proto', 'jdm', 'hiper'];
+// Autos de rally: usan la carrocería de otro modelo (shape) con equipo de rally, y pierden mucho menos agarre en tierra, grava y nieve (loose)
+MODELS.rcoupe = { name: 'Coupé de Rally', desc: 'Tracción trasera y cubiertas de tierra: va de costado todo el camino.', price: 5000, lvl: 4,
+            hp: 380, kg: 1250, drv: 'T', loose: 0.6, shape: 'gt', kit: 'rally',
+            len: 44, wid: 22, vmax: 0.97, acc: 1.12, grip: 1.02, wt: 0.9,
+            snd: { cyl: 6, cross: false, scale: 1.15, fc: 1.4, pipe: 0.46, d1: 0.0019 } };
+MODELS.r4x4 = { name: 'Rally 4x4 Turbo', desc: 'Un Grupo B: 4x4, turbo y nada de miedo. En tierra no lo alcanza nadie.', price: 12000, lvl: 8,
+            hp: 450, kg: 1100, drv: '4', loose: 0.85, shape: 'hatch', kit: 'rally',
+            len: 36, wid: 20, vmax: 0.99, acc: 1.22, grip: 1.07, wt: 0.76,
+            snd: { cyl: 5, cross: false, scale: 1.2, fc: 1.6, pipe: 0.42, d1: 0.0017 } };
+const MODEL_KEYS = ['gt', 'hatch', 'muscle', 'proto', 'jdm', 'hiper', 'rcoupe', 'r4x4'];
+const shapeOf = k => (MODELS[k] && MODELS[k].shape) || k;
 const UPGRADES = [
   { k: 'motor',  name: 'Motor',           desc: 'Más aceleración en cada nivel',                base: 600 },
   { k: 'caja',   name: 'Velocidad final', desc: 'Más velocidad máxima en cada nivel',           base: 700 },
@@ -1869,6 +1883,7 @@ const LAYOUT = {
   jdm:    { fw: [9.5, 8.6], rw: [-16.5, 9.6], wy: 10.9, ws: [3, 9.5, 6.4, 7.8], roof: [-9, 11.5, 7.8], rear: [-14.5, -9, 7.4, 6.2], nose: 21.6, tail: -21.4, hw: 10.8 },
   hiper:  { fw: [10.5, 9.5], rw: [-17.5, 11], wy: 12.4, ws: [0.5, 8.5, 5.8, 8.4], roof: [-9.5, 10, 7], rear: [-16.5, -9.5, 7, 5.2], nose: 24.6, tail: -22.8, hw: 12.1 }
 };
+for (const k in MODELS) if (MODELS[k].shape) LAYOUT[k] = LAYOUT[MODELS[k].shape];
 /* =====================================================================
    PERSONALIZACIÓN (vinilos, llantas, neón, humo) y DAÑOS
    ===================================================================== */
@@ -1911,7 +1926,7 @@ function drawNeon(c, night) {
 }
 
 function makeCarSprite(spec) {
-  const m = spec.model || 'gt', L = LAYOUT[m];
+  const mk = spec.model || 'gt', m = shapeOf(mk), L = LAYOUT[m];
   const W0 = 60, H0 = 36, c = mkCanvas(W0*SPR, H0*SPR), g = c.getContext('2d');
   g.scale(SPR, SPR); g.translate(W0/2, H0/2);
   const C0 = hexRGB(spec.col), A0 = hexRGB(spec.acc), hw = L.hw;
@@ -2041,10 +2056,19 @@ function makeCarSprite(spec) {
   g.fillStyle = '#a81c14'; g.fillRect(L.tail, -hw + 2.5, 1.4, 3.2); g.fillRect(L.tail, hw - 5.7, 1.4, 3.2);
   g.fillStyle = 'rgba(255,150,130,.55)'; g.fillRect(L.tail + 0.2, -hw + 2.8, 0.5, 2.6); g.fillRect(L.tail + 0.2, hw - 5.4, 0.5, 2.6);
   bodyPathM(g, m); g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 0.5; g.stroke();
+  if (MODELS[mk].kit === 'rally') {   // equipo de rally: faros extra, barreros, alerón y toma de techo
+    const hw = L.hw, nx = L.nose - 3.4;
+    g.fillStyle = '#17181c'; rrG(g, nx - 1.3, -5.2, 2.6, 10.4, 0.8); g.fill();
+    for (const y of [-3.7, -1.25, 1.25, 3.7]) { g.fillStyle = '#fff3b0'; g.beginPath(); g.arc(nx, y, 0.95, 0, 7); g.fill(); g.fillStyle = '#ffffff'; g.beginPath(); g.arc(nx + 0.25, y - 0.25, 0.35, 0, 7); g.fill(); }
+    g.fillStyle = '#c21a12'; for (const x of [L.fw[0] - 5.2, L.rw[0] - 5.2]) { g.fillRect(x, -hw - 0.9, 1.5, 2.2); g.fillRect(x, hw - 1.3, 1.5, 2.2); }
+    g.fillStyle = '#111215'; rrG(g, L.tail - 0.6, -hw + 0.6, 3, hw*2 - 1.2, 0.7); g.fill(); g.fillStyle = 'rgba(255,255,255,.22)'; g.fillRect(L.tail - 0.2, -hw + 1.2, 0.5, hw*2 - 2.4);
+    g.fillStyle = '#111215'; rrG(g, (L.roof[0] + L.roof[1])/2 - 0.5, -1.6, 3.4, 3.2, 0.6); g.fill();
+  }
   return c;
 }
 const shadowCache = {};
 function carShadowFor(m) {
+  m = shapeOf(m);
   if (shadowCache[m]) return shadowCache[m];
   const W0 = 60, H0 = 36, c = mkCanvas(W0*SPR, H0*SPR), g = c.getContext('2d');
   g.shadowColor = 'rgba(0,0,0,.7)'; g.shadowBlur = 4*SPR; g.shadowOffsetX = 1000*SPR;
@@ -2492,7 +2516,7 @@ function applyModel(c, key, st) {
   const m = MODELS[key]; c.model = key;
   c.cr = m.wid/2 - 0.5; c.co = m.len/2 - c.cr;
   c.ka = m.len*0.295; c.kb = c.ka; c.kL = c.ka + c.kb; c.kI = (m.len*m.len + m.wid*m.wid)/12*0.86;
-  c.gripMul = st.grip; c.wtMul = st.wt; c.steerMul = st.steer || 1; c.brakeMul = st.brake || 1; c.vmaxMul = st.vmax; c.accMul = st.acc;
+  c.loose = m.loose || 0; c.gripMul = st.grip; c.wtMul = st.wt; c.steerMul = st.steer || 1; c.brakeMul = st.brake || 1; c.vmaxMul = st.vmax; c.accMul = st.acc;
 }
 function makeCar(isPlayer) {
   return { isPlayer, name: 'VOS', col: '#d7141a', acc: '#f4f4f0', stripe: 'doble', model: 'gt', cr: 10.5, co: 11, ka: 13, kb: 13, kL: 26, kI: 170,
@@ -2583,7 +2607,7 @@ function drawDamage(c) {
     for (let i = 0; i < 3; i++) { const a = d.a + i*0.4, l = d.r*(0.6 + d.s[i]*0.6); ctx.beginPath(); ctx.moveTo(d.x - Math.cos(a)*l*0.5, d.y - Math.sin(a)*l*0.5); ctx.lineTo(d.x + Math.cos(a)*l*0.5, d.y + Math.sin(a)*l*0.5); ctx.stroke(); }
   }
   const L = LAYOUT[c.model] || LAYOUT.gt;
-  if (c.broken) for (const [k, y] of [['l', -6.6], ['r', 6.6]]) if (c.broken[k]) { ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.ellipse(L.nose - 0.6, y*(c.model === 'proto' ? 0.55 : 1), 1.3, 2.4, 0, 0, 7); ctx.fill(); }
+  if (c.broken) for (const [k, y] of [['l', -6.6], ['r', 6.6]]) if (c.broken[k]) { ctx.fillStyle = '#1a1a1a'; ctx.beginPath(); ctx.ellipse(L.nose - 0.6, y*(shapeOf(c.model) === 'proto' ? 0.55 : 1), 1.3, 2.4, 0, 0, 7); ctx.fill(); }
   if (c.dmg > 0.6) { ctx.fillStyle = `rgba(20,20,20,${((c.dmg - 0.6)*0.6).toFixed(2)})`; ctx.beginPath(); ctx.ellipse(L.nose - 6, 0, 6, 7, 0, 0, 7); ctx.fill(); }
 }
 function damageSmoke(c, dt) {
@@ -2757,7 +2781,7 @@ function stepCar(c, dt, throttle) {
   if (inP && !c.puddle && c.v > 140) { if (c.isPlayer) sfxSplash(); c.splashT = 0.35; }
   c.puddle = inP;
   const sf = surfAt(c.dist); c.surf = sf;
-  const G = C.agarreEnCurvas*c.gripMul*WX.grip*(GRIP_MOD || 1)*(inP ? 0.74 : 1)*(onGrass ? 0.5 : sf.grip);
+  const G = C.agarreEnCurvas*c.gripMul*WX.grip*(GRIP_MOD || 1)*(inP ? 0.74 : 1)*(onGrass ? 0.5 : sf.grip + (sf.loose ? (1 - sf.grip)*(c.loose || 0) : 0));
   if (c.boostT > 0) c.boostT -= dt;
   if (c.stallT > 0) c.stallT -= dt;
   const boosting = c.boostT > 0;
@@ -2814,7 +2838,7 @@ function stepCar(c, dt, throttle) {
   const FxW = Fxc;
   c.vp = (c.vp || 0) + (Math.max(-1, Math.min(1, FxW/650)) - (c.vp || 0))*Math.min(1, dt*6);
   c.vr = (c.vr || 0) + (Math.max(-1, Math.min(1, Fyc/C.agarreEnCurvas)) - (c.vr || 0))*Math.min(1, dt*6);
-  if (!onGrass && sf.drag) Fxc -= u*sf.drag;
+  if (!onGrass && sf.drag) Fxc -= u*sf.drag*(1 - (c.loose || 0));
   const torque = c.ka*FyF*Math.cos(st) - c.kb*FyR;
 
   c.vx += (Fxc*fx + Fyc*rx)*dt; c.vy += (Fxc*fy + Fyc*ry)*dt;
@@ -2958,7 +2982,7 @@ function aiThrottle(c, sk) {
   const s = mod(c.dist), grip = C.agarreEnCurvas*c.gripMul*WX.grip*(GRIP_MOD || 1)*(sk || c.skillNow*(1 - 0.14*WX.wetK))*(1 - Math.max(0, c.v - 400)/900), v2 = c.v*c.v, dec = C.friccion*(1 + (c.brakeMul - 1)*0.35)*(1 - 0.15*WX.wetK);
   for (let a = 20; a < 40 + c.v*1.4; a += 25) {
     const k = Math.abs(sample(s + a, tA).k); if (k < 1e-4) continue;
-    const sf = surfAt(s + a), vs2 = grip*sf.grip*(!sk && sf.loose ? 0.88 : 1)/k;   // los rivales respetan más el piso suelto
+    const sf = surfAt(s + a), vs2 = grip*(sf.grip + (sf.loose ? (1 - sf.grip)*(c.loose || 0) : 0))*(!sk && sf.loose ? 0.88 : 1)/k;   // los rivales respetan más el piso suelto
     if (v2 > vs2 && v2 - vs2 > 2*dec*a*0.95) return false;
   }
   return true;
@@ -4127,7 +4151,7 @@ function gRender() {
   gEl.querySelector('#gNum').textContent = '#' + prof.num;
   gEl.querySelectorAll('.gtabs button').forEach(b => b.classList.toggle('on', b.dataset.t === gTab));
   { const pr = carPR(gView, null), ch = (t, c) => `<span style="padding:2px 8px;border-radius:5px;background:${c || 'rgba(255,255,255,.1)'}">${t}</span>`;
-    gEl.querySelector('#gSpec').innerHTML = ch('<b>' + carHP(gView, null) + '</b> CV') + ch(MODELS[gView].kg + ' kg') + ch(DRV_TXT(MODELS[gView].drv)) + ch((EN ? 'CLASS ' : 'CLASE ') + prClass(pr), '#e1251b') + ch('PR ' + pr); }
+    gEl.querySelector('#gSpec').innerHTML = ch('<b>' + carHP(gView, null) + '</b> CV') + ch(MODELS[gView].kg + ' kg') + ch(DRV_TXT(MODELS[gView].drv)) + ch((EN ? 'CLASS ' : 'CLASE ') + prClass(pr), '#e1251b') + ch('PR ' + pr) + (MODELS[gView].loose ? ch('RALLY · ' + (EN ? 'dirt ' : 'tierra ') + '+' + Math.round(MODELS[gView].loose*100) + '%', '#8a5a1c') : ''); }
   // estadísticas: blanco = modelo, verde = lo que suman tus mejoras
   const base = MODELS[gView], sb = statNorm({ vmax: base.vmax, acc: base.acc, grip: base.grip, wt: base.wt }), sn = statNorm(playerStats(gView)), sc = statNorm(playerStats(prof.model));
   const rows = [['VELOCIDAD', 'vel'], ['ACELERACIÓN', 'ace'], ['AGARRE', 'aga'], ['ESTABILIDAD', 'est']];
@@ -5354,6 +5378,7 @@ const TT_MEDALS = {
   volcan: [29.19, 27.65, 25.91], glaciar: [26.62, 25.22, 23.76], laberinto: [26.62, 25.22, 23.35], infierno: [30.09, 28.50, 26.19],
   quebrada: [22.86, 21.65, 20.68], islabrava: [22.39, 21.21, 19.95], pampa: [24.99, 23.67, 22.22], caldera: [24.93, 23.61, 22.00], montana: [25.51, 24.16, 23.92], riolava: [27.94, 26.47, 24.85], selva: [27.22, 25.78, 24.02], pasohelado: [27.16, 25.73, 24.09], costabrava: [26.66, 25.25, 23.61], mesa: [23.50, 22.26, 20.71], polar: [26.66, 25.25, 23.71], grancanon: [29.83, 28.25, 26.21], oscuro: [27.20, 25.76, 23.91], acanegro: [28.18, 26.69, 25.07], obsidiana: [30.76, 29.14, 27.15], abismo: [31.79, 30.11, 28.05], blanco: [32.27, 30.56, 26.23], perfecta: [30.11, 28.52, 26.73], granfinal: [30.82, 29.19, 27.29], laberfinal: [34.04, 32.24, 29.67],
 };
+for (const [k, b, f] of [['rsierra', 'bosque', 1.16], ['rdesierto', 'canon', 1.2], ['rblanco', 'nevado', 1.14]]) if (TT_MEDALS[b]) TT_MEDALS[k] = TT_MEDALS[b].map(x => +(x*f).toFixed(1));
 const MEDAL_ICO = ['', '🥉', '🥈', '🥇'], MEDAL_NAME = ['', 'BRONCE', 'PLATA', 'ORO'], MEDAL_PAY = [0, 300, 700, 1500];
 prof.tt = prof.tt || {};
 if (DAILY) TT_MEDALS.diaria = DAILY.medals;
@@ -6446,10 +6471,14 @@ const REQ_EVENTS = [
   { id: 'x4',     ico: '❄', name: '4x4 EN LA NIEVE',     en: '4WD IN THE SNOW',   track: 'nevado',     wx: 'dia',      laps: 3, lvl: 8,  prize: [4500, 2700, 1600],  drv: '4' },
   { id: 'hp600',  ico: '💪', name: 'MÁS DE 600 CV',       en: 'OVER 600 HP',       track: 'dunas',      wx: 'tarde',    laps: 3, lvl: 10, prize: [6000, 3600, 2000],  minHp: 600 },
   { id: 'claseb', ico: '🅱', name: 'CLASE B',             en: 'CLASS B',           track: 'serpentina', wx: 'cambia',   laps: 4, lvl: 12, prize: [7000, 4200, 2400],  maxPR: 799 },
-  { id: 'hiper',  ico: '👑', name: 'DUELO DE HÍPER',      en: 'HYPERCAR DUEL',     track: 'oasis',      wx: 'noche',    laps: 4, lvl: 25, prize: [15000, 9000, 5000], models: ['hiper'], rivals: 3 }
-].filter(e => TRACKS[e.track]);
+  { id: 'hiper',  ico: '👑', name: 'DUELO DE HÍPER',      en: 'HYPERCAR DUEL',     track: 'oasis',      wx: 'noche',    laps: 4, lvl: 25, prize: [15000, 9000, 5000], models: ['hiper'], rivals: 3 },
+  { id: 'rsierra',   ico: '🌲', name: 'RALLY DE LA SIERRA', en: 'SIERRA RALLY',  track: 'rsierra',   wx: 'dia',    laps: 3, lvl: 3,  prize: [3000, 1800, 1000], rally: true },
+  { id: 'rdesierto', ico: '🏜', name: 'RALLY DEL DESIERTO', en: 'DESERT RALLY',  track: 'rdesierto', wx: 'tarde',  laps: 3, lvl: 6,  prize: [5000, 3000, 1700], rally: true },
+  { id: 'rblanco',   ico: '🏔', name: 'RALLY BLANCO',       en: 'WHITE RALLY',   track: 'rblanco',   wx: 'cambia', laps: 3, lvl: 9,  prize: [8000, 4800, 2700], rally: true }
+].filter(e => TRACKS[e.track]).sort((a, b) => a.lvl - b.lvl);
 function reqText(e) {
   if (e.models) return LX('Solo ', 'Only ') + e.models.map(k => MODELS[k].name).join(LX(' o ', ' or '));
+  if (e.rally) return LX('Solo autos de rally', 'Rally cars only');
   if (e.stock) return LX('Cualquier auto, sin mejoras', 'Any car, no upgrades');
   if (e.maxHp) return LX('Autos de hasta ' + e.maxHp + ' CV', 'Cars up to ' + e.maxHp + ' HP');
   if (e.minHp) return LX('Autos de ' + e.minHp + ' CV o más', 'Cars with ' + e.minHp + ' HP or more');
@@ -6461,6 +6490,7 @@ function reqText(e) {
 function reqCheck(e, model) {
   const m = MODELS[model], free = { f: 1 };
   if (e.models && e.models.indexOf(model) < 0) return { ok: false, why: LX('No es de este evento', 'Not allowed here') };
+  if (e.rally && !m.loose) return { ok: false, why: LX('No es de rally', 'Not a rally car') };
   if (e.drv && m.drv !== e.drv) return { ok: false, why: LX('Tracción ', 'Drive: ') + DRV_TXT(m.drv) };
   if (e.stock) return { ok: true, lim: { f: 0 }, note: Object.values(prof.upg).some(v => v > 0) ? LX('Corre sin tus mejoras', 'Runs without your upgrades') : '' };
   if (e.maxHp) { if (m.hp > e.maxHp) return { ok: false, why: m.hp + LX(' CV de fábrica', ' HP stock') };
@@ -6472,7 +6502,7 @@ function reqCheck(e, model) {
     return { ok: true, lim: { f: lo }, note: LX('Se limita a PR ' + e.maxPR, 'Limited to PR ' + e.maxPR) }; }
   return { ok: true, lim: free, note: '' };
 }
-function reqAIModels() { const e = REQ_CUR, l = MODEL_KEYS.filter(k => { const m = MODELS[k]; return !(e.models && e.models.indexOf(k) < 0) && !(e.drv && m.drv !== e.drv) && !(e.maxHp && m.hp > e.maxHp) && !(e.minHp && m.hp < e.minHp*0.8) && !(e.maxPR && carPR(k, { f: 0 }) > e.maxPR); }); return l.length ? l : ['gt']; }
+function reqAIModels() { const e = REQ_CUR, l = MODEL_KEYS.filter(k => { const m = MODELS[k]; return !(e.rally && !m.loose) && !(e.models && e.models.indexOf(k) < 0) && !(e.drv && m.drv !== e.drv) && !(e.maxHp && m.hp > e.maxHp) && !(e.minHp && m.hp < e.minHp*0.8) && !(e.maxPR && carPR(k, { f: 0 }) > e.maxPR); }); return l.length ? l : ['gt']; }
 function reqBest(id) { return (prof.req || {})[id] || 0; }
 function reqMenuHTML(a) {
   const done = REQ_EVENTS.filter(e => reqBest(e.id) === 1).length, open = REQ_EVENTS.filter(e => (prof.lvl || 1) >= e.lvl).length;
