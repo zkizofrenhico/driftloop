@@ -789,7 +789,7 @@ function nativeSay(text, prio) {
   const T = NP('TextToSpeech'); if (!T) return false;
   const vk = (EN ? 'en' : 'es') + SET.vgen;
   const pick = (VOICE.nat && VOICE.nat.k === vk) ? Promise.resolve(VOICE.nat) : T.getSupportedVoices().then(r => { const vs = (r && r.voices) || [], i = rankVoices(vs); return VOICE.nat = { k: vk, i, lang: i >= 0 ? vs[i].lang : null }; }).catch(() => VOICE.nat = { k: vk, i: -1 });
-  pick.then(n => (prio ? T.stop() : Promise.resolve()).catch(() => {}).then(() => { const o = { text, lang: n.lang || (EN ? 'en-US' : 'es-AR'), rate: 1.1, pitch: SET.vgen === 'm' ? 0.9 : 1.05, volume: Math.min(1, SET.vol + 0.1), category: 'ambient' }; if (n.i >= 0) o.voice = n.i; return T.speak(o); })).catch(() => {});
+  pick.then(n => (prio ? T.stop() : Promise.resolve()).catch(() => {}).then(() => { const o = { text, lang: n.lang || (EN ? 'en-US' : 'es-AR'), rate: vStyle().rate, pitch: vStyle().pitch, volume: Math.min(1, SET.vol + 0.1), category: 'ambient' }; if (n.i >= 0) o.voice = n.i; return T.speak(o); })).catch(() => {});
   return true;
 }
 // notificación local para mañana a las 10: circuito del día y racha (sin servidor)
@@ -3100,6 +3100,7 @@ function update(dt) {
     if (now !== prev && now > 0) sfxBlip(440, 0.15);
     if (countdown <= 0) {
       state = 'race'; stateT = 0; raceTime = 0; sfxBlip(880, 0.3);
+      if (sayOK() && !tut) sayPick(['¡Largamos!', '¡Luz verde! ¡A fondo!', '¡Y largan!'], ['Go, go, go!', 'Green light! Floor it!', 'And they\'re off!']);
       // largada estilo Mario Kart: apretar justo antes del verde = turbo; demasiado temprano = se ahoga
       const pc = held ? LAUNCH.pressCd : null, vm = C.velocidadMaxima;
       if (pc !== null && pc >= 0.12 && pc <= 0.6) { giveSpeed(player, vm*0.45); player.boostT = 1.6; if (player.st) player.st.perfectStart = true; popup('¡SALIDA PERFECTA!', '#ffd23f', true); sfxBoost(1); shake = Math.max(shake, 5); }
@@ -4291,7 +4292,7 @@ function pRender() {
   row('#pSnd', 'Efectos', 'Derrapes, choques, lluvia…', slider('fx'));
   row('#pSnd', 'Música', '', slider('music'));
   row('#pSnd', 'Locutor', 'Anuncia la última vuelta, récords y resultados', toggle('voice'));
-  row('#pSnd', 'Voz del locutor', '', seg('vgen', [['f', 'MUJER'], ['m', 'HOMBRE']], () => { VOICE.v = null; VOICE.nat = null; setTimeout(() => say(EN ? 'Final lap' : 'Última vuelta', true), 200); }));
+  row('#pSnd', 'Voz del locutor', '', seg('vgen', [['f', 'MUJER'], ['m', 'HOMBRE']], () => { VOICE.v = null; VOICE.nat = null; setTimeout(() => say(EN ? 'Final lap! Now or never!' : '¡Última vuelta! ¡Ahora o nunca!', true), 200); }));
   row('#pGame', 'Vibración', 'En choques', toggle('vib'));
   row('#pGame', 'Cámara drone', 'Apagada = cámara fija detrás del auto', toggle('drone', () => { C.movimientoDrone = SET.drone ? 1 : 0; }));
   row('#pGame', 'Nombres de los autos', '', toggle('names'));
@@ -6533,6 +6534,8 @@ function pickVoice() {
   const i = rankVoices(vs); return i >= 0 ? vs[i] : null;
 }
 try { if (window.speechSynthesis) speechSynthesis.onvoiceschanged = () => { VOICE.v = pickVoice(); }; } catch(e) {}
+function vStyle() { return SET.vgen === 'm' ? { rate: 1.16, pitch: 0.74 } : { rate: 1.2, pitch: 1.12 }; }   // locutor con actitud
+function sayPick(es, en, prio) { const a = EN ? en : es; say(a[(Math.random()*a.length)|0], prio); }
 function say(text, prio) {
   if (SET.voice === false || AU.muted) return;
   const now = performance.now(); if (!prio && now - VOICE.last < 1400) return;
@@ -6544,7 +6547,7 @@ function say(text, prio) {
     if (prio) speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(t); VOICE.v = VOICE.v || pickVoice();
     if (VOICE.v) u.voice = VOICE.v; u.lang = VOICE.v ? VOICE.v.lang : (EN ? 'en-US' : 'es-AR');
-    u.rate = 1.12; u.pitch = SET.vgen === 'm' ? 0.85 : 1.05; u.volume = Math.min(1, SET.vol + 0.1);
+    u.rate = vStyle().rate; u.pitch = vStyle().pitch; u.volume = Math.min(1, SET.vol + 0.1);
     speechSynthesis.speak(u); VOICE.last = now;
   } catch(e) {}
 }
@@ -6553,25 +6556,25 @@ const ORD_EN = ['', 'first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'sev
 // qué dice el locutor cuando aparece cada cartel
 function sayBanner(t, sub) {
   let m;
-  if (t === 'ÚLTIMA VUELTA') say('¡Última vuelta!', true);
-  else if (t === '¡GANASTE!') say(EN ? 'You win!' : '¡Ganaste! ¡Primer puesto!', true);
-  else if (t === 'META' && (m = String(sub).match(/^(\d+)°/))) say(EN ? 'You finished ' + ORD_EN[+m[1]] : 'Terminaste ' + ORD_ES[+m[1]], true);
-  else if ((m = t.match(/¡(ORO|PLATA|BRONCE)!$/))) say(EN ? { ORO: 'Gold medal!', PLATA: 'Silver medal!', BRONCE: 'Bronze medal!' }[m[1]] : '¡Medalla de ' + m[1].toLowerCase() + '!', true);
-  else if (t.indexOf('NUEVO RÉCORD') >= 0) say('¡Nuevo récord!', true);
-  else if ((m = t.match(/AFUERA (.+)!$/))) say(EN ? m[1] + ' is out!' : '¡Afuera ' + m[1] + '!', true);
-  else if (t === '¡SOBREVIVISTE!') say(EN ? 'You survived!' : '¡Sobreviviste!', true);
-  else if (t === '☠ ELIMINADO' || t === 'ELIMINADO') say(EN ? 'Eliminated!' : '¡Eliminado!', true);
+  if (t === 'ÚLTIMA VUELTA') sayPick(['¡Última vuelta! ¡Ahora o nunca!', '¡Última vuelta! ¡Dejá todo!', '¡Se viene la última! ¡A fondo!'], ['Final lap! Now or never!', 'Final lap! Give it everything!', 'Last lap! Floor it!'], true);
+  else if (t === '¡GANASTE!') sayPick(['¡Ganaste! ¡Qué carrera, por favor!', '¡Primero! ¡Nadie te para!', '¡Victoria! ¡Sos una máquina!'], ['You win! What a race!', 'First place! Nobody can stop you!', 'Victory! You are a machine!'], true);
+  else if (t === 'META' && (m = String(sub).match(/^(\d+)°/))) { const n = +m[1]; say(EN ? 'You finished ' + ORD_EN[n] + (n <= 3 ? '. Podium!' : '. The next one is yours!') : 'Terminaste ' + ORD_ES[n] + (n <= 3 ? '. ¡Podio!' : '. ¡La próxima es tuya!'), true); }
+  else if ((m = t.match(/¡(ORO|PLATA|BRONCE)!$/))) say(EN ? { ORO: 'Gold medal! Flawless!', PLATA: 'Silver medal! So close!', BRONCE: 'Bronze medal! Keep pushing!' }[m[1]] : { ORO: '¡Medalla de oro! ¡Impecable!', PLATA: '¡Medalla de plata! ¡Te faltó un toque!', BRONCE: '¡Medalla de bronce! ¡Vamos por más!' }[m[1]], true);
+  else if (t.indexOf('NUEVO RÉCORD') >= 0) sayPick(['¡Nuevo récord! ¡Histórico!', '¡Nuevo récord! ¡Qué manera de volar!'], ['New record! Historic!', 'New record! What a flyer!'], true);
+  else if ((m = t.match(/AFUERA (.+)!$/))) say(EN ? m[1] + ' is out! Bye bye!' : '¡Afuera ' + m[1] + '! ¡Chau, chau!', true);
+  else if (t === '¡SOBREVIVISTE!') say(EN ? 'You survived! Ice cold!' : '¡Sobreviviste! ¡Sangre fría!', true);
+  else if (t === '☠ ELIMINADO' || t === 'ELIMINADO') say(EN ? 'Eliminated! Rematch, now!' : '¡Eliminado! ¡Revancha ya!', true);
   else if ((m = t.match(/PUNTO PARA J([12])/))) say(EN ? 'Point to player ' + m[1] : 'Punto para jugador ' + (m[1] === '1' ? 'uno' : 'dos'), true);
   else if ((m = t.match(/GANÓ J([12])/))) say(EN ? 'Player ' + m[1] + ' wins!' : '¡Ganó el jugador ' + (m[1] === '1' ? 'uno' : 'dos') + '!', true);
-  else if ((m = t.match(/LE GANASTE A (.+)!$/))) say(EN ? 'You beat ' + m[1] + '!' : '¡Le ganaste a ' + m[1] + '!', true);
+  else if ((m = t.match(/LE GANASTE A (.+)!$/))) say(EN ? 'You beat ' + m[1] + '! Take that!' : '¡Le ganaste a ' + m[1] + '! ¡Tomá!', true);
   else if (eventMode && EVT_MODS.some(x => t.indexOf(x.name) >= 0)) say(t.replace(/^\S+ /, ''), true);
 }
 function sayPopup(t) {
   let m;
-  if (t === '¡SALIDA PERFECTA!') say('¡Salida perfecta!', true);
-  else if (t.indexOf('¡RÉCORD DE VUELTA!') === 0) say('¡Récord de vuelta!');
-  else if (t === '▲ P1' && state === 'race') say(EN ? 'You take the lead!' : '¡Tomaste la punta!');
-  else if ((m = t.match(/COMBO ×(\d)/))) say(EN ? 'Combo times ' + m[1] + '!' : '¡Combo por ' + m[1] + '!');
+  if (t === '¡SALIDA PERFECTA!') sayPick(['¡Salida perfecta! ¡Qué reflejos!', '¡Salida perfecta! ¡Saliste como un rayo!'], ['Perfect start! What reflexes!', 'Perfect start! Like lightning!'], true);
+  else if (t.indexOf('¡RÉCORD DE VUELTA!') === 0) say(EN ? 'Lap record! Flying!' : '¡Récord de vuelta! ¡Volando!');
+  else if (t === '▲ P1' && state === 'race') sayPick(['¡Tomaste la punta!', '¡Pasaste adelante! ¡Ahora aguantala!', '¡Primero! ¡No aflojes!'], ['You take the lead!', 'Out in front! Now hold it!', 'Leading! Don\'t let up!']);
+  else if ((m = t.match(/COMBO ×(\d)/))) say(EN ? 'Combo times ' + m[1] + '! Keep it going!' : '¡Combo por ' + m[1] + '! ¡Seguí así!');
 }
 
 /* =====================================================================
