@@ -5093,6 +5093,16 @@ const XCSS = `
 #xp .cup .best{display:inline-block;margin-top:6px;padding:3px 8px;border-radius:6px;font-size:14px;font-weight:800;font-style:italic;background:rgba(0,0,0,.35);color:var(--c1)}
 #xp .cup .best.new{color:#111;background:#3dff8a}
 #xp .cup.lock{filter:saturate(.15) brightness(.75)}
+#xp .cup.won{background:linear-gradient(160deg,color-mix(in srgb,var(--c1) 30%,var(--c2)),color-mix(in srgb,var(--c2) 35%,#0b0d12) 70%);border:2px solid var(--c1);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.35),0 0 18px color-mix(in srgb,var(--c1) 45%,transparent),0 8px 22px rgba(0,0,0,.45)}
+#xp .cup.won:before{background:radial-gradient(color-mix(in srgb,var(--c1) 75%,transparent),transparent 70%);width:170px;height:170px}
+#xp .cup.won:after{content:"";position:absolute;top:-20%;bottom:-20%;left:-60%;width:40%;pointer-events:none;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.28),transparent);transform:skewX(-18deg);animation:cupShine 3.2s ease-in-out infinite}
+#xp .cup.won .tro{filter:drop-shadow(0 0 12px color-mix(in srgb,var(--c1) 80%,transparent)) drop-shadow(0 4px 8px rgba(0,0,0,.5))}
+#xp .cup.won .cn b{text-shadow:0 0 14px color-mix(in srgb,var(--c1) 70%,transparent),0 2px 0 rgba(0,0,0,.5)}
+#xp .cup.won .best{background:var(--c1);color:#111;font-size:15px;box-shadow:0 0 12px color-mix(in srgb,var(--c1) 60%,transparent)}
+#xp .cup.won .stars,#xp .cup.won .cn{color:#e8edf2}
+@keyframes cupShine{0%,55%{left:-60%}100%{left:130%}}
 #xp .cup .lk{position:absolute;left:0;right:0;bottom:0;top:146px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;background:rgba(8,9,13,.95);font-size:22px;text-align:center;padding:6px 8px}
 #xp .cup .lk span{font-size:14px;font-weight:700;color:#e3e7ec}
 #xp .shake{animation:shk .35s}@keyframes shk{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
@@ -5136,7 +5146,7 @@ function cupBadge(k) { const b = prof.cups[k]; return !b || b > 6 ? '' : b === 1
 function openCupsPanel() {
   const cards = CUP_KEYS.map((k, i) => {
     const c = CUPS[k], ok = cupUnlocked(k), b = cupBadge(k), curves = c.races.map(r => trackInfo(r.track).curves);
-    return `<button class="cup${ok ? '' : ' lock'}" data-c="${k}" style="--c1:${c.col};--c2:${c.col2}">
+    return `<button class="cup${ok ? '' : ' lock'}${prof.cups[k] === 1 ? ' won' : ''}" data-c="${k}" style="--c1:${c.col};--c2:${c.col2}">
       <div class="tro">${trophySVG(k, 58)}</div><div class="cn">COPA<b>${c.name}</b></div>
       <div class="stars">${DIFF_NAME[c.stars]}</div>
       <div class="ci">${c.races.length} carreras · ${Math.min(...curves)}–${Math.max(...curves)} curvas</div>
