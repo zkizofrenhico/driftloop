@@ -201,7 +201,7 @@ const I18N_EN = {
   'Tocá para cambiar': 'Tap to change', '◀ MANTENÉ R': '◀ HOLD R', '¡EMPIEZA A NEVAR!': 'IT STARTS SNOWING!', 'VICTORIAS': 'WINS', 'CARRERA': 'RACE', 'CARRERAS': 'RACES', 'QUEDAN': 'LEFT', 'VISTA PREVIA': 'PREVIEW', 'Arrastrá para girar el auto': 'Drag to spin the car', 'COPAS': 'CUPS', 'VUELTA': 'LAP', 'VUELTAS': 'LAPS',
   'en pista': 'on track', 'CIRCUITO DEL DÍA': 'DAILY TRACK', '⚠ MOTOR TOCADO': '⚠ ENGINE DAMAGED', 'Español': 'Español', 'English': 'English',
   'SIGUIENTE ▶': 'NEXT ▶', 'CARGANDO CIRCUITO…': 'LOADING TRACK…', '☁ SE VIENE LA NIEVE…': '☁ SNOW IS COMING…', 'Del día ×2': 'Daily ×2', 'En curso': 'In progress', 'SIGUE': 'NEXT',
-  'Subí al podio para ganar el trofeo.': 'Finish on the podium to win the trophy.', 'Choques, derrapes y cambios de marcha': 'Crashes, drifts and gear shifts',
+  'Subí al podio para ganar el trofeo.': 'Finish on the podium to win the trophy.',
   'PRÓXIMA META': 'NEXT GOAL', 'DUPLICAR PREMIO': 'DOUBLE PRIZE', 'PREMIO DUPLICADO': 'PRIZE DOUBLED', 'RECUPERAR RACHA': 'RESTORE STREAK', 'JUGALO GRATIS': 'PLAY IT FREE'
 };
 
@@ -732,18 +732,6 @@ function vibrate(ms) { if (CALIB) return;
   const H = NP('Haptics');
   if (H) { (ms > 55 ? H.impact({ style: 'HEAVY' }) : H.vibrate({ duration: Math.round(ms) })).catch(() => {}); return; }
   try { navigator.vibrate && navigator.vibrate(ms); } catch(e) {}
-}
-// toques suaves: cambios de marcha, pianos, derrapes, semáforo (respetan la opción Vibración)
-let hapLast = 0;
-function hap(kind) {
-  if (CALIB || !SET.vib || replayOn || introPhase || document.hidden) return;
-  const now = performance.now(), strong = kind === 'heavy' || kind === 'ok';
-  if (!strong && now - hapLast < 45) return; hapLast = now;
-  try {
-    const H = NP('Haptics');
-    if (H) { (kind === 'ok' ? H.notification({ type: 'SUCCESS' }) : H.impact({ style: kind === 'heavy' ? 'HEAVY' : kind === 'medium' ? 'MEDIUM' : 'LIGHT' })).catch(() => {}); return; }
-    if (navigator.vibrate && navigator.userActivation && navigator.userActivation.hasBeenActive) navigator.vibrate(kind === 'heavy' ? 28 : kind === 'ok' ? [12, 40, 18] : kind === 'medium' ? 14 : 7);
-  } catch(e) {}
 }
 /* =====================================================================
    ANUNCIOS CON RECOMPENSA (AdMob por Capacitor, plugin @capacitor-community/admob).
@@ -2154,7 +2142,7 @@ function audioUpdate(dt, held) {
   else if (p.reverse) { target = 1400 + vr*30000; ENG.gear = 0; ENG.load += (1 - ENG.load)*Math.min(1, dt*8); }
   else {
     let g = ENG.gear, r = rpmFor(vr, g);
-    if (r > 7800 && g < GEARS.length - 1) { g++; ENG.shiftT = 0.12; p.popFx = 0.14; if (Math.random() < 0.6) sfxPop(); if (state === 'race') hap('light'); }
+    if (r > 7800 && g < GEARS.length - 1) { g++; ENG.shiftT = 0.12; p.popFx = 0.14; if (Math.random() < 0.6) sfxPop(); }
     else if (g > 0 && r < 3700) g--;
     ENG.gear = g; r = rpmFor(vr, g);
     if (g === 0 && thr) r = Math.max(r, 3000 + vr*20000);
@@ -2284,7 +2272,7 @@ function setMute(m) { AU.muted = m; try { localStorage.setItem('driftloop_mute',
 let state = 'menu', stateT = 0, animT = 0, countdown = 0;
 let cars = [], player = null, raceTime = 0, LAPS = 3;
 let shake = 0, shownPos = 0, posPendT = 0, resultsReady = false;
-let kickX = 0, kickY = 0, hitStop = 0, curbHapT = 0, skidHapT = 0;   // golpe de cámara con dirección, micro-pausa en choques fuertes y ritmo de los toques hápticos
+let kickX = 0, kickY = 0, hitStop = 0;   // golpe de cámara con dirección y micro-pausa en choques fuertes
 const rec = { bestRace: 0, bestLap: 0, wins: 0 };
 const RSFX = TRACK_KEY === 'autodromo' ? '' : '_' + TRACK_KEY + (TRACK_KEY === 'diaria' && DAILY ? '_' + DAILY.date : '');   // récords separados por circuito
 try { rec.bestRace = +localStorage.getItem('driftloop_bestrace' + RSFX) || 0; rec.bestLap = +localStorage.getItem('driftloop_bestlap2' + RSFX) || 0; rec.wins = +localStorage.getItem('driftloop_wins') || 0; } catch(e) {}
@@ -2726,8 +2714,8 @@ function cornerCheck(c, k, onGrass) {
   if (ak < 1/650) {
     corner.in = false;
     if (corner.bad) return;
-    if (corner.drift > 0.22) { popup('¡DRIFT! ' + Math.round(corner.drift*57) + '°', '#5fd8ff', true); sfxBlip(660, 0.08); hap('medium'); c.bonus = (c.bonus || 0) + 1; if (c.st) c.st.drifts++; }
-    else if (corner.max >= 0.85) { popup('¡CURVA PERFECTA!', '#7dffb0', true); sfxBlip(880, 0.08); hap('ok'); c.bonus = (c.bonus || 0) + 1; if (c.st) c.st.perfects++; }
+    if (corner.drift > 0.22) { popup('¡DRIFT! ' + Math.round(corner.drift*57) + '°', '#5fd8ff', true); sfxBlip(660, 0.08); c.bonus = (c.bonus || 0) + 1; if (c.st) c.st.drifts++; }
+    else if (corner.max >= 0.85) { popup('¡CURVA PERFECTA!', '#7dffb0', true); sfxBlip(880, 0.08); c.bonus = (c.bonus || 0) + 1; if (c.st) c.st.perfects++; }
   }
 }
 
@@ -2746,7 +2734,7 @@ function onLap(c, ld) {
     else popup('Vuelta ' + lt.toFixed(2) + 's', '#ffffff');
     if (elimMode) { if (cars.length > 1) popup('VUELTA ' + (c.lapsDone + 1), '#ffffff', true); }
     else if (c.lapsDone === LAPS - 1) banner('ÚLTIMA VUELTA', '¡A FONDO HASTA LA META!', 'rgba(225,37,27,.95)'); else popup('VUELTA ' + (c.lapsDone + 1) + '/' + LAPS, '#ffffff', true);
-    sfxBlip(990, 0.15); hap('medium');
+    sfxBlip(990, 0.15);
   }
 }
 
@@ -2959,12 +2947,12 @@ function update(dt) {
     if (duoMode) { if (held2 && LAUNCH2.pressCd === null) LAUNCH2.pressCd = countdown; if (!held2) LAUNCH2.pressCd = null; }
     const prev = Math.ceil(countdown - 0.4); countdown -= dt;
     const now = Math.ceil(countdown - 0.4);
-    if (now !== prev && now > 0) { sfxBlip(440, 0.15); hap('light'); }
+    if (now !== prev && now > 0) sfxBlip(440, 0.15);
     if (countdown <= 0) {
-      state = 'race'; stateT = 0; raceTime = 0; sfxBlip(880, 0.3); hap('medium');
+      state = 'race'; stateT = 0; raceTime = 0; sfxBlip(880, 0.3);
       // largada estilo Mario Kart: apretar justo antes del verde = turbo; demasiado temprano = se ahoga
       const pc = held ? LAUNCH.pressCd : null, vm = C.velocidadMaxima;
-      if (pc !== null && pc >= 0.12 && pc <= 0.6) { giveSpeed(player, vm*0.45); player.boostT = 1.6; if (player.st) player.st.perfectStart = true; popup('¡SALIDA PERFECTA!', '#ffd23f', true); sfxBoost(1); shake = Math.max(shake, 5); hap('heavy'); }
+      if (pc !== null && pc >= 0.12 && pc <= 0.6) { giveSpeed(player, vm*0.45); player.boostT = 1.6; if (player.st) player.st.perfectStart = true; popup('¡SALIDA PERFECTA!', '#ffd23f', true); sfxBoost(1); shake = Math.max(shake, 5); }
       else if (pc !== null && pc > 0.6 && pc <= 1.05) { giveSpeed(player, vm*0.3); player.boostT = 0.7; popup('¡BUENA SALIDA!', '#7dffb0', true); sfxBoost(0.6); }
       else if (pc !== null && pc > 1.6) { player.stallT = 1.0; popup('¡PASADO DE VUELTAS!', '#ff5a4a', true); }
       else if (held) giveSpeed(player, 70);
@@ -3015,7 +3003,7 @@ function update(dt) {
         if (posPendT > 0.35) {
           const better = player.pos < shownPos; if (better && player.st) player.st.overtakes += shownPos - player.pos; shownPos = player.pos; posPendT = 0;
           popup((better ? '▲ P' : '▼ P') + player.pos, better ? '#7dffb0' : '#ff8a7a', better);
-          sfxBlip(better ? 760 : 300, 0.1); if (better) hap('medium');
+          sfxBlip(better ? 760 : 300, 0.1);
         }
       } else posPendT = 0;
     }
@@ -3037,8 +3025,7 @@ function update(dt) {
   updateCamera(dt);
   if (player.popFx > 0) player.popFx -= dt;
   if (state === 'race' && player.st) player.st.maxKmh = Math.max(player.st.maxKmh, player.v/C.velocidadMaxima*280);
-  if (state === 'race' && !player.onGrass && Math.abs(player.d) > HALF_W - 4 && player.v > 150 && Math.abs(sample(mod(player.dist), tA).k) > 1/700) { shake = Math.max(shake, 1.2*C.vibracionCamara); if ((curbHapT -= dt) <= 0) { curbHapT = 0.09; hap('light'); } }
-  if (state === 'race' && !duoMode && player.skid > 0.55 && player.v > 140 && !player.onGrass && (skidHapT -= dt) <= 0) { skidHapT = 0.16; hap('light'); }
+  if (state === 'race' && !player.onGrass && Math.abs(player.d) > HALF_W - 4 && player.v > 150 && Math.abs(sample(mod(player.dist), tA).k) > 1/700) shake = Math.max(shake, 1.2*C.vibracionCamara);
   shake *= Math.exp(-7*dt); if (shake < 0.05) shake = 0;
   { const kd = Math.exp(-11*dt); kickX *= kd; kickY *= kd; }
   try { audioUpdate(dt, held); } catch(e) {}
@@ -4138,7 +4125,7 @@ function pRender() {
   row('#pSnd', 'Música', '', slider('music'));
   row('#pSnd', 'Locutor', 'Anuncia la última vuelta, récords y resultados', toggle('voice'));
   row('#pSnd', 'Voz del locutor', '', seg('vgen', [['f', 'MUJER'], ['m', 'HOMBRE']], () => { VOICE.v = null; VOICE.nat = null; setTimeout(() => say(EN ? 'Final lap' : 'Última vuelta', true), 200); }));
-  row('#pGame', 'Vibración', 'Choques, derrapes y cambios de marcha', toggle('vib'));
+  row('#pGame', 'Vibración', 'En choques', toggle('vib'));
   row('#pGame', 'Cámara drone', 'Apagada = cámara fija detrás del auto', toggle('drone', () => { C.movimientoDrone = SET.drone ? 1 : 0; }));
   row('#pGame', 'Nombres de los autos', '', toggle('names'));
   row('#pGame', 'Aviso ¡SOLTÁ!', 'Te avisa cuándo frenar', toggle('warn'));
