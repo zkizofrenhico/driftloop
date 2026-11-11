@@ -3288,7 +3288,7 @@ function render() {
     if (!nearCam(c.wx, c.wy, R)) continue;
     if (BRIDGE && carLevel(c)) { const b2 = bodyOff(c); ctx.save(); ctx.globalAlpha = 0.75; ctx.translate(c.wx + SUN.x*12 - b2[0]*0.8, c.wy + SUN.y*12 - b2[1]*0.8); ctx.rotate(c.va); ctx.drawImage(carShadowFor(c.model), -30, -18, 60, 36); ctx.restore(); }
     const bo = bodyOff(c); ctx.save(); ctx.translate(c.wx + bo[0], c.wy + bo[1]); ctx.rotate(c.va); if (c.airT > 0) { const sc = 1 + airH(c)*0.6; ctx.scale(sc, sc); }
-    ctx.drawImage(carSprite(c), -30, -18, 60, 36); drawDamage(c); if (FXL >= 3 && nearCam(c.wx, c.wy, 520)) drawSheen(c);
+    ctx.drawImage(carSprite(c), -30, -18, 60, 36); drawDamage(c); if (FXL >= 3 && c.isPlayer) drawSheen(c);
     if (c.popFx > 0) { const L = LAYOUT[c.model], s = 10 + c.popFx*120; ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(puffGlowWarm, L.tail - s*1.1, -s/2, s, s); ctx.drawImage(puffGlowRed, L.tail - s*1.4, -s*0.35, s*0.7, s*0.7); ctx.globalCompositeOperation = 'source-over'; }
     const brake = racingNow && !c.throttle && c.v > 20;
     if (brake) {
@@ -3481,7 +3481,7 @@ function drawParts(low) {
     if (p.grow) {
       const tint = p.col.charCodeAt(0) === 84, dust = !tint && p.col.indexOf('120') >= 0;
       if (low !== dust) continue;
-      const s = p.size*(tint || dust ? 2.2 : 2.5), fade = a*Math.min(1, (1 - a)*7 + 0.15);   // aparece de a poco en vez de nacer opaco
+      const s = p.size*2.2, fade = a*Math.min(1, (1 - a)*7 + 0.15);   // aparece de a poco en vez de nacer opaco
       ctx.globalAlpha = fade*(dust ? 0.55 : tint ? 0.55 : 0.4);
       ctx.drawImage(tint ? tintPuff(p.col.slice(1)) : dust ? puffDust : SM[p.k || 0], p.x - s, p.y - s, s*2, s*2);
     } else if (p.col === 'stone') {
@@ -3538,24 +3538,26 @@ function drawTags() {
 }
 
 // ---- velocidad: los bordes de la imagen se desenfocan y se estiran hacia afuera; el centro (tu auto y la curva que viene) queda nítido ----
-let sbC = null, sbG = null, sbMask = null, sbK = 0;
+let sbC = null, sbG = null, sbC2 = null, sbG2 = null, sbMask = null, sbK = 0;
 function drawSpeedBlur() {
   const r = player.v/C.velocidadMaxima, on = state === 'race' && !replayOn && FXL >= 2;
   const want = !on ? 0 : player.boostT > 0 ? 1 : Math.max(0, Math.min(1, (r - 0.72)*3.2));
   sbK += (want - sbK)*Math.min(1, (lastDt || 0.016)*5);
   if (sbK < 0.03) return;
-  const bw = Math.max(1, Math.ceil(cv.width/5)), bh = Math.max(1, Math.ceil(cv.height/5));
+  // todo se arma en un lienzo chico (1/6): una sola copia de pantalla completa por cuadro
+  const bw = Math.max(1, Math.ceil(cv.width/6)), bh = Math.max(1, Math.ceil(cv.height/6));
   if (!sbC || sbC.width !== bw || sbC.height !== bh) {
-    sbC = mkCanvas(bw, bh); sbG = sbC.getContext('2d');
+    sbC = mkCanvas(bw, bh); sbG = sbC.getContext('2d'); sbC2 = mkCanvas(bw, bh); sbG2 = sbC2.getContext('2d');
     sbMask = sbG.createRadialGradient(bw/2, bh*0.64, Math.min(bw, bh)*0.36, bw/2, bh*0.64, Math.hypot(bw, bh)*0.62);
     sbMask.addColorStop(0, 'rgba(0,0,0,0)'); sbMask.addColorStop(0.55, 'rgba(0,0,0,.75)'); sbMask.addColorStop(1, 'rgba(0,0,0,1)');
   }
-  sbG.globalCompositeOperation = 'copy'; sbG.imageSmoothingEnabled = true; sbG.drawImage(cv, 0, 0, bw, bh);
-  sbG.globalCompositeOperation = 'destination-in'; sbG.fillStyle = sbMask; sbG.fillRect(0, 0, bw, bh);
+  sbG2.globalCompositeOperation = 'copy'; sbG2.globalAlpha = 1; sbG2.imageSmoothingEnabled = true; sbG2.drawImage(cv, 0, 0, bw, bh);
+  sbG.globalCompositeOperation = 'copy'; sbG.globalAlpha = 1; sbG.drawImage(sbC2, 0, 0);
+  sbG.globalCompositeOperation = 'source-over'; const cx = bw/2, cy = bh*0.64;
+  for (const z of [1.018, 1.036, 1.056]) { sbG.globalAlpha = 0.42; sbG.drawImage(sbC2, cx - cx*z, cy - cy*z, bw*z, bh*z); }   // copias apenas más grandes: el borde se estira hacia afuera
+  sbG.globalAlpha = 1; sbG.globalCompositeOperation = 'destination-in'; sbG.fillStyle = sbMask; sbG.fillRect(0, 0, bw, bh);
   ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
-  const cw = cv.width, ch = cv.height, cx = cw/2, cy = ch*0.64;
-  ctx.globalAlpha = Math.min(1, sbK); ctx.drawImage(sbC, 0, 0, cw, ch);
-  for (const z of [1.018, 1.036, 1.056]) { ctx.globalAlpha = 0.42*sbK; ctx.drawImage(sbC, cx - cx*z, cy - cy*z, cw*z, ch*z); }   // tres copias apenas más grandes: el borde se estira hacia afuera
+  ctx.globalAlpha = Math.min(1, sbK); ctx.drawImage(sbC, 0, 0, cv.width, cv.height);
   ctx.restore();
 }
 
@@ -4218,7 +4220,7 @@ function audioVolumes() {
   AU.out.gain.value = AU.muted ? 0 : SET.vol;
   AU.engBus.gain.value = SET.eng;
   AU.master.gain.value = 0.9*SET.fx;
-  if (MUS.bus) MUS.bus.gain.value = musVolume();
+  if (MUS.bus) { MUS.tgt = null; MUS.bus.gain.cancelScheduledValues(0); MUS.bus.gain.value = musVolume(); }
 }
 let paused = false, pauseFromMenu = false;
 const PCSS = `
@@ -6496,7 +6498,7 @@ function musicTick() {
   if (!MUS.bus) { MUS.bus = AU.ac.createGain(); MUS.bus.gain.value = musVolume(); MUS.bus.connect(AU.out); }
   const want = musWanted();
   const post = (state === 'finish' && stateT > 2.2) || replayOn, mv = musVolume()*(post ? 0.45 : 1);   // después de la carrera, música bajita
-  if (Math.abs(MUS.bus.gain.value - mv) > 0.004) MUS.bus.gain.setTargetAtTime(mv, AU.ac.currentTime, 0.4);
+  if (MUS.tgt !== mv) { MUS.tgt = mv; MUS.bus.gain.cancelScheduledValues(AU.ac.currentTime); MUS.bus.gain.setTargetAtTime(mv, AU.ac.currentTime, 0.4); }   // solo cuando cambia (si no, se acumulan órdenes)
   if (MUS.kind === 'menu' && !MUS.gen.race) { MUS.gen.race = 1; setTimeout(() => { try { musBuffer('race'); } catch(e) {} }, 2500); }   // la de carrera se prepara mientras estás en el menú
   if (want === MUS.kind) return;
   // se genera de a una, sin trabar el cuadro en que se pide
@@ -7141,6 +7143,7 @@ function showErr() {
 let ecoLast = 0;
 function frame(now) {
   if (now - ecoLast < (ECO ? 30 : 10)) { requestAnimationFrame(frame); return; }   // ahorro: 30 cuadros por segundo; pantallas de 120 Hz: tope de 60
+  if (ADS.busy) { last = now; requestAnimationFrame(frame); return; }   // con el anuncio en pantalla el juego no dibuja nada
   ecoLast = now;
   const raw = Math.max(0, (now - last)/1000); let dt = Math.min(ECO ? 0.05 : 0.033, raw); last = Math.max(last, now);
   if (tut && !paused) dt *= tutTick(dt);
