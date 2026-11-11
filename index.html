@@ -1861,7 +1861,7 @@ function carPR(model, lim) { return statsPR(playerStats(model, lim)); }
 function prClass(pr) { return pr < 450 ? 'D' : pr < 600 ? 'C' : pr < 800 ? 'B' : pr < 1050 ? 'A' : 'S'; }
 function playerStats(model, lim) {
   if (lim === undefined) lim = REQ_LIM;
-  const mk = model || prof.model, m = MODELS[mk], u = prof.upg, e = k => k === 'motor' ? motorEff(mk, lim) : upgEff(u[k] || 0)*(lim ? lim.f : 1);
+  const mk = model || (typeof MODEL_OVR !== 'undefined' && MODEL_OVR) || prof.model, m = MODELS[mk], u = prof.upg, e = k => k === 'motor' ? motorEff(mk, lim) : upgEff(u[k] || 0)*(lim ? lim.f : 1);
   return { vmax: m.vmax*(1 + 0.025*e('caja')), acc: m.acc*(1 + 0.05*e('motor')), grip: m.grip*(1 + 0.03*e('neum')),
            wt: m.wt*Math.max(0.45, 1 - 0.09*e('susp')), steer: 1 + 0.06*e('susp'), brake: 1 + 0.08*e('frenos') };
 }
@@ -2659,7 +2659,7 @@ function resetRace() {
       c.skill = rand(1.0, 1.28)*C.habilidadRivales; c.skillNow = c.skill;
       c.pref = rand(-12, 12); c.aggr = C.agresividadRivales*rand(0.5, 1.5);
     }
-    else { applyModel(c, prof.model, ps); c.col = prof.col; c.acc = prof.acc; c.stripe = prof.stripe; }
+    else { applyModel(c, MODEL_OVR || prof.model, ps); c.col = prof.col; c.acc = prof.acc; c.stripe = prof.stripe; }
     cars.push(c);
   }
   player = cars[pslot]; player.bonus = 0; player.earn = 0; player.st = newRaceStats(); player.st.startPos = pslot + 1;
@@ -6560,7 +6560,7 @@ function eventApplyMods() {
   for (const c of cars) { if (m.brake) c.brakeMul *= m.brake; if (m.vmax) c.vmaxMul *= m.vmax; }
 }
 function endEvent() {
-  endReq();
+  endReq(); endLic();
   if (!eventMode) return; eventMode = false; GRIP_MOD = 1; applySettings();
   const w = prof.weather || 'dia'; if (WX_KEY !== w) { const wet = WX.wet; applyWeather(w); if (WX.wet !== wet) clearTiles(); }
 }
@@ -6635,20 +6635,22 @@ function reqAIModels() { const e = REQ_CUR, l = MODEL_KEYS.filter(k => { const m
 function reqBest(id) { return (prof.req || {})[id] || 0; }
 function reqMenuHTML(a) {
   const done = REQ_EVENTS.filter(e => reqBest(e.id) === 1).length, open = REQ_EVENTS.filter(e => (prof.lvl || 1) >= e.lvl).length;
-  return `<button class="evt req${a}" data-a="req"><b>🏁</b><div><small>${LX('EVENTOS CON REQUISITOS', 'RESTRICTED EVENTS')} · ${done}/${REQ_EVENTS.length} ${LX('ganados', 'won')}</small><span>${LX('Cada carrera pide un auto distinto', 'Every race needs a different car')}</span></div><i>${open > done ? '▶' : '🏆'}</i></button>`;
+  return `<button class="evt req${a}" data-a="req"><b>🏁</b><div><small>${LX('EVENTOS Y LICENCIAS', 'EVENTS & LICENSES')} · ${done}/${REQ_EVENTS.length} ${LX('ganados', 'won')} · 🎓 ${LICS.filter(L => licHas(L.k)).length}/${LICS.length}</small><span>${LX('Cada carrera pide un vehículo distinto', 'Every race needs a different vehicle')}</span></div><i>${open > done ? '▶' : '🏆'}</i></button>`;
 }
 function openReqPanel() {
   const lvl = prof.lvl || 1;
   const cards = REQ_EVENTS.map(e => {
-    const b = reqBest(e.id), lock = lvl < e.lvl, any = MODEL_KEYS.some(k => prof.owned[k] && reqCheck(e, k).ok);
+    const b = reqBest(e.id), lk = reqLockTxt(e), lock = !!lk, any = MODEL_KEYS.some(k => prof.owned[k] && reqCheck(e, k).ok);
     return `<button class="rq${lock ? ' lock' : ''}${b === 1 ? ' won' : ''}" data-r="${e.id}"><b>${e.ico}</b><div><h4>${LX(e.name, e.en)}</h4><p>${reqText(e)}</p>
       <small>${TRACKS[e.track].name} · ${e.laps} ${LX('vueltas', 'laps')} · ${WEATHERS[e.wx].icon} · ${LX('Premio', 'Prize')} ${fmtMoney(e.prize[0])}</small></div>
-      <i>${lock ? '🔒<em>' + LX('NIVEL ', 'LEVEL ') + e.lvl + '</em>' : b === 1 ? '🏆' : b ? b + '°' : any ? '▶' : '<em>' + LX('TE FALTA AUTO', 'NO CAR YET') + '</em>'}</i></button>`;
+      <i>${lock ? '🔒<em>' + lk + '</em>' : b === 1 ? '🏆' : b ? b + '°' : any ? '▶' : '<em>' + LX('TE FALTA AUTO', 'NO CAR YET') + '</em>'}</i></button>`;
   }).join('');
   showPanel(`<div class="wrap"><h2>${LX('EVEN<span>TOS</span>', 'EVE<span>NTS</span>')}</h2><div class="sub">${LX('Cada evento acepta solo ciertos autos. Si el tuyo se pasa de potencia o de clase, se limita solo para esa carrera: nunca perdés tus mejoras.', 'Each event only accepts certain cars. If yours is over the power or class limit, it is restricted just for that race: you never lose your upgrades.')}</div>
+    <button class="licbtn" data-a="lic"><b>🎓</b><span>${LX('LICENCIAS', 'LICENSES')}<br><small>${LX('Pruebas cortas con medalla. Abren los eventos de rally, camiones, fórmula y motos.', 'Short medal tests. They open the rally, truck, formula and bike events.')}</small></span><i>${LICS.filter(L => licHas(L.k)).length}/${LICS.length}</i></button>
     <div class="rqs">${cards}</div></div>
     <div class="bar"><button class="s" data-a="back">${LX('VOLVER', 'BACK')}</button></div>`);
-  xEl.querySelectorAll('[data-r]').forEach(b => b.onclick = () => { initAudio(); const e = REQ_EVENTS.find(x => x.id === b.dataset.r); if (lvl < e.lvl) { sfxBlip(220, 0.08); b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake'); return; } sfxBlip(900, 0.05); openReqDetail(e); });
+  xEl.querySelectorAll('[data-r]').forEach(b => b.onclick = () => { initAudio(); const e = REQ_EVENTS.find(x => x.id === b.dataset.r); if (reqLockTxt(e)) { sfxBlip(220, 0.08); b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake'); return; } sfxBlip(900, 0.05); openReqDetail(e); });
+  xEl.querySelector('[data-a="lic"]').onclick = () => { initAudio(); sfxBlip(880, 0.08); openLicPanel(); };
   xEl.querySelector('[data-a="back"]').onclick = () => { initAudio(); hidePanel(); };
 }
 function openReqDetail(e) {
@@ -6718,6 +6720,139 @@ function reqReward() {
 #xp .rc.ok{border-color:rgba(61,255,138,.6);background:rgba(61,255,138,.08)}
 #xp .rc i.no{font-style:normal;font-size:12px;font-weight:800;color:#ff9d8f;text-align:right;max-width:44%}
 #xp .rc .go{padding:9px 12px;border-radius:9px;background:#e1251b;color:#fff;font-size:16px;font-weight:800;font-style:italic;white-space:nowrap}
+`; document.head.appendChild(st); })();
+
+/* =====================================================================
+   LICENCIAS (tipo Gran Turismo): pruebas cortas con auto prestado y medalla de bronce, plata u oro.
+   Progreso en prof.lic = { idPrueba: medalla 1-3 }, prof.licT = mejores tiempos, prof.licPaid = premios ya cobrados.
+   ===================================================================== */
+var licMode = false, LIC_CUR = null, MODEL_OVR = null;
+const LICS = [
+  { k: 'B', name: 'LICENCIA B · NACIONAL', en: 'B LICENSE · NATIONAL', col: '#6fc3ff', track: 'autodromo', prize: 2000, gold: 4000, tests: [
+    { id: 'B1', name: 'Largada y primera curva', en: 'Launch and first corner', car: 'hatch', frac: 0.4, t: [6.7, 6.2, 5.9] },
+    { id: 'B2', name: 'Media vuelta sin pisar el pasto', en: 'Half a lap, stay off the grass', car: 'gt', frac: 0.5, rule: 'clean', t: [8.4, 7.8, 7.4] },
+    { id: 'B3', name: 'Vuelta completa', en: 'Full lap', car: 'gt', frac: 1, t: [16.7, 15.5, 14.7] },
+    { id: 'B4', name: 'Vuelta completa con lluvia', en: 'Full lap in the rain', car: 'gt', frac: 1, wx: 'lluvia', t: [19.0, 17.7, 16.7] } ] },
+  { k: 'R', name: 'LICENCIA R · RALLY', en: 'R LICENSE · RALLY', col: '#d39a4a', track: 'rsierra', need: ['B'], prize: 3000, gold: 6000, tests: [
+    { id: 'R1', name: 'Tierra suelta', en: 'Loose dirt', car: 'r4x4', frac: 0.35, t: [10.7, 9.9, 9.4] },
+    { id: 'R2', name: 'De costado con tracción trasera', en: 'Sideways with rear-wheel drive', car: 'rcoupe', frac: 0.6, t: [20.5, 19.1, 18.0] },
+    { id: 'R3', name: 'Etapa completa', en: 'Full stage', car: 'r4x4', frac: 1, t: [29.8, 27.7, 26.1] } ] },
+  { k: 'C', name: 'LICENCIA C · CAMIONES', en: 'C LICENSE · TRUCKS', col: '#8fb3d9', track: 'superovalo', need: ['B'], prize: 3000, gold: 6000, tests: [
+    { id: 'C1', name: 'Frenada larga', en: 'Long braking', car: 'camion', frac: 0.3, t: [8.4, 7.8, 7.3] },
+    { id: 'C2', name: 'Vuelta completa sin pisar el pasto', en: 'Full lap, stay off the grass', car: 'camion', frac: 1, rule: 'clean', t: [27.6, 25.6, 24.2] },
+    { id: 'C3', name: 'Dos vueltas con el Súper Camión', en: 'Two laps in the Super Truck', car: 'camionx', frac: 2, t: [51.0, 47.4, 44.7] } ] },
+  { k: 'F', name: 'LICENCIA F · FÓRMULA', en: 'F LICENSE · FORMULA', col: '#ff6b5e', track: 'granpremio', need: ['B'], prize: 4000, gold: 8000, tests: [
+    { id: 'F1', name: 'Recta y primera frenada', en: 'Straight and first braking zone', car: 'fjr', frac: 0.4, t: [9.9, 9.2, 8.7] },
+    { id: 'F2', name: 'Vuelta limpia en Fórmula Junior', en: 'Clean lap in Formula Junior', car: 'fjr', frac: 1, rule: 'clean', t: [25.0, 23.2, 21.9] },
+    { id: 'F3', name: 'Vuelta en Fórmula GP', en: 'Lap in Formula GP', car: 'f1', frac: 1, t: [22.8, 21.2, 20.0] } ] },
+  { k: 'M', name: 'LICENCIA M · MOTOS', en: 'M LICENSE · BIKES', col: '#b98cff', track: 'granpremio', need: ['B'], prize: 4000, gold: 8000, tests: [
+    { id: 'M1', name: 'Primeras curvas en Scooter', en: 'First corners on the Scooter', car: 'scooter', frac: 0.3, rule: 'nofall', t: [10.8, 10.0, 9.4] },
+    { id: 'M2', name: 'Vuelta sin caerte', en: 'A lap without falling', car: 'moto', frac: 1, rule: 'nofall', t: [25.2, 23.4, 22.1] },
+    { id: 'M3', name: 'Vuelta en Superbike sin caerte', en: 'Superbike lap without falling', car: 'superbike', frac: 1, rule: 'nofall', t: [23.3, 21.7, 20.4] } ] },
+  { k: 'S', name: 'SÚPER LICENCIA', en: 'SUPER LICENSE', col: '#ffe36b', track: 'serpentina', need: ['B', 'R', 'C', 'F', 'M'], prize: 8000, gold: 20000, tests: [
+    { id: 'S1', name: 'Vuelta limpia con el Hiper V12', en: 'Clean lap in the Hyper V12', car: 'hiper', frac: 1, rule: 'clean', t: [30.2, 28.1, 26.5] },
+    { id: 'S2', name: 'Dos vueltas con lluvia en el Prototipo', en: 'Two wet laps in the Prototype', car: 'proto', frac: 2, wx: 'lluvia', t: [64.2, 59.6, 56.2] } ] }
+].filter(L => TRACKS[L.track]);
+const LIC_TESTS = [].concat(...LICS.map(L => L.tests.map(t => Object.assign(t, { lic: L }))));
+const LIC_ICO = ['', '🥉', '🥈', '🥇'], LIC_TXT = ['', 'BRONCE', 'PLATA', 'ORO'];
+function licMedal(id) { return (prof.lic || {})[id] || 0; }
+function licHas(k) { const L = LICS.find(x => x.k === k); return !L || L.tests.every(t => licMedal(t.id) >= 1); }
+function licGold(k) { const L = LICS.find(x => x.k === k); return !!L && L.tests.every(t => licMedal(t.id) >= 3); }
+function licOpen(L) { return !L.need || L.need.every(licHas); }
+function licRule(t) { return t.rule === 'clean' ? LX('Si pisás el pasto, perdés', 'Touch the grass and you fail') : t.rule === 'nofall' ? LX('Si te caés, perdés', 'Fall and you fail') : LX('Llegá lo más rápido que puedas', 'Get there as fast as you can'); }
+function licDist(t) { return t.frac === 1 ? LX('1 vuelta', '1 lap') : t.frac > 1 ? t.frac + LX(' vueltas', ' laps') : Math.round(t.frac*100) + LX('% de la vuelta', '% of a lap'); }
+function openLicPanel() {
+  const total = LIC_TESTS.length, golds = LIC_TESTS.filter(t => licMedal(t.id) >= 3).length;
+  const html = LICS.map(L => {
+    const open = licOpen(L), has = licHas(L.k), gold = licGold(L.k);
+    const rows = L.tests.map(t => { const m = licMedal(t.id), bt = (prof.licT || {})[t.id];
+      return `<button class="lt" data-l="${t.id}"${open ? '' : ' disabled'}><b>${m ? LIC_ICO[m] : '○'}</b><div><h4>${t.id} · ${LX(t.name, t.en)}</h4><p>${MODELS[t.car].name} · ${licDist(t)}${t.wx ? ' · ' + WEATHERS[t.wx].icon : ''} · 🥇 ${t.t[2].toFixed(1)}s${bt ? ' · ' + LX('tuyo ', 'yours ') + bt.toFixed(2) + 's' : ''}</p></div><i>▶</i></button>`; }).join('');
+    return `<div class="lc${open ? '' : ' lock'}${gold ? ' gold' : ''}" style="--lc:${L.col}"><div class="lh"><h3>${LX(L.name, L.en)}</h3><span>${!open ? '🔒 ' + LX('Necesitás: ', 'Requires: ') + L.need.filter(k => !licHas(k)).join(', ') : gold ? '🥇 ' + LX('TODO ORO', 'ALL GOLD') : has ? '✓ ' + LX('OBTENIDA', 'EARNED') : LX('Premio ', 'Prize ') + fmtMoney(L.prize)}</span></div>${rows}</div>`;
+  }).join('');
+  showPanel(`<div class="wrap"><h2>${LX('LICEN<span>CIAS</span>', 'LICEN<span>SES</span>')}</h2><div class="sub">${LX('Pruebas cortas con un vehículo prestado. Con bronce en todas las pruebas ganás la licencia y se abren los eventos de esa categoría. ', 'Short tests in a loaned vehicle. Bronze in every test earns the license and opens that category\'s events. ')}🥇 ${golds}/${total}</div>
+    <div class="lics">${html}</div></div>
+    <div class="bar"><button class="s" data-a="back">${LX('VOLVER', 'BACK')}</button></div>`);
+  xEl.querySelectorAll('[data-l]').forEach(b => b.onclick = () => { initAudio(); sfxBlip(880, 0.08); licGo(b.dataset.l); });
+  xEl.querySelector('[data-a="back"]').onclick = () => { initAudio(); openReqPanel(); };
+}
+function licGo(id) {
+  const t = LIC_TESTS.find(x => x.id === id), tk = t.lic.track;
+  if (tk !== TRACK_KEY) {
+    try { localStorage.setItem('driftloop_licback', TRACK_KEY); localStorage.setItem('driftloop_track', tk); localStorage.setItem('driftloop_licgo', id); } catch(_) {}
+    reloading = true; hidePanel(); render(); setTimeout(() => { try { location.hash = tk; } catch(_) {} location.reload(); }, 60); return;
+  }
+  startLic(id);
+}
+function startLic(id) {
+  const t = LIC_TESTS.find(x => x.id === id); if (!t || !licOpen(t.lic)) { openLicPanel(); return; }
+  endChampRace(); endTT(); endElim(); endDuo(); endDrift(); endEvent();
+  licMode = true; LIC_CUR = t; MODEL_OVR = t.car; REQ_LIM = { f: 0 }; t.done = false;
+  try { audioSetModel(t.car); } catch(_) {}
+  hidePanel(); try { hideRes(); } catch(_) {}
+  mEl.style.display = 'none'; menuShown = false;
+  applySettings(); C.vueltas = 99; C.rivales = 0; C.posicionLargada = 1;
+  const wet = WX.wet; applyWeather(t.wx || 'dia'); rainDrops.length = 0; if (WX.wet !== wet) clearTiles();
+  resetRace(); startCountdown();
+  banner('🎓 ' + t.id + ' · ' + LX(t.name, t.en), licRule(t) + ' · 🥇 ' + t.t[2].toFixed(1) + 's · 🥈 ' + t.t[1].toFixed(1) + 's · 🥉 ' + t.t[0].toFixed(1) + 's', 'rgba(20,90,150,.95)');
+}
+function endLic() {
+  if (!licMode) return; licMode = false; LIC_CUR = null; MODEL_OVR = null; REQ_LIM = null; applySettings();
+  try { audioSetModel(prof.model); } catch(_) {}
+  const w = prof.weather || 'dia'; if (WX_KEY !== w) { const wet = WX.wet; applyWeather(w); if (WX.wet !== wet) clearTiles(); }
+}
+function licTick() {
+  const t = LIC_CUR; if (!t || t.done || state !== 'race') return;
+  if (raceTime > 0.4 && ((t.rule === 'clean' && player.onGrass) || (t.rule === 'nofall' && player.fallT > 0))) return licEnd(0, t.rule === 'clean' ? LX('Pisaste el pasto', 'You touched the grass') : LX('Te caíste', 'You fell'));
+  if (raceTime > t.t[0] + 6) return licEnd(0, LX('Se acabó el tiempo', 'Out of time'));
+  if (player.dist >= t.frac*TR.L) licEnd(raceTime, '');
+}
+function licEnd(time, why) {
+  const t = LIC_CUR; t.done = true;
+  const m = !time ? 0 : time <= t.t[2] ? 3 : time <= t.t[1] ? 2 : time <= t.t[0] ? 1 : 0, L = t.lic, had = licHas(L.k), hadG = licGold(L.k);
+  prof.lic = prof.lic || {}; prof.licT = prof.licT || {}; prof.licPaid = prof.licPaid || {};
+  const prevM = prof.lic[t.id] || 0; if (m > prevM) prof.lic[t.id] = m;
+  if (time && (!prof.licT[t.id] || time < prof.licT[t.id])) prof.licT[t.id] = +time.toFixed(2);
+  let pay = 0, extra = '';
+  if (!had && licHas(L.k) && !prof.licPaid[L.k]) { prof.licPaid[L.k] = 1; pay += L.prize; extra += `<div class="lw">🎓 ${LX('¡Ganaste la ', 'You earned the ')}${LX(L.name, L.en)}! +${fmtMoney(L.prize)}</div>`; }
+  if (!hadG && licGold(L.k) && prof.licPaid[L.k] !== 2) { prof.licPaid[L.k] = 2; pay += L.gold; extra += `<div class="lw g">🥇 ${LX('¡Todo oro! Premio extra ', 'All gold! Bonus ')}+${fmtMoney(L.gold)}</div>`; }
+  if (pay) { prof.money += pay; prof.earned = (prof.earned || 0) + pay; }
+  saveProf();
+  if (m) { try { banner(LIC_ICO[m] + ' ¡' + LIC_TXT[m] + '!', time.toFixed(2) + 's', 'rgba(20,90,150,.95)'); } catch(_) {} sfxBlip(1320, 0.15); } else sfxBlip(220, 0.15);
+  const idx = L.tests.indexOf(t), next = L.tests[idx + 1];
+  setTimeout(() => {
+    if (!licMode || LIC_CUR !== t) return;
+    resetRace(); state = 'menu'; stateT = 0;
+    showPanel(`<div class="wrap"><h2>${t.id} <span>${m ? LIC_ICO[m] + ' ' + T(LIC_TXT[m]) : LX('SIN MEDALLA', 'NO MEDAL')}</span></h2>
+      <div class="sub"><b>${LX(t.name, t.en)}</b><br>${why ? '✕ ' + why : LX('Tu tiempo: ', 'Your time: ') + '<b>' + time.toFixed(2) + 's</b>'}${prof.licT[t.id] ? ' · ' + LX('Mejor: ', 'Best: ') + prof.licT[t.id].toFixed(2) + 's' : ''}</div>
+      <div class="lmed">${[3, 2, 1].map(i => `<div class="${m >= i || prevM >= i ? 'on' : ''}"><b>${LIC_ICO[i]}</b><span>${t.t[i - 1].toFixed(1)}s</span></div>`).join('')}</div>${extra}</div>
+      <div class="bar"><button class="s" data-a="back">${LX('LICENCIAS', 'LICENSES')}</button><button class="s" data-a="again">↻ ${LX('OTRA VEZ', 'RETRY')}</button>${next && (m || prevM) ? `<button class="s go" data-a="next">${LX('SIGUIENTE', 'NEXT')} ▶</button>` : ''}</div>`);
+    xEl.querySelector('[data-a="back"]').onclick = () => { initAudio(); endLic(); resetRace(); state = 'menu'; stateT = 0; openLicPanel(); };
+    xEl.querySelector('[data-a="again"]').onclick = () => { initAudio(); startLic(t.id); };
+    const nb = xEl.querySelector('[data-a="next"]'); if (nb) nb.onclick = () => { initAudio(); startLic(next.id); };
+  }, m ? 1600 : 900);
+}
+function reqLicNeed(e) { return e.truck ? 'C' : e.rally ? 'R' : e.cls === 'formula' ? 'F' : e.cls === 'moto' ? 'M' : ''; }
+function reqLockTxt(e) { const n = reqLicNeed(e); return n && !licHas(n) ? LX('LICENCIA ', 'LICENSE ') + n : (prof.lvl || 1) < e.lvl ? LX('NIVEL ', 'LEVEL ') + e.lvl : ''; }
+(function () { const st = document.createElement('style'); st.textContent = `
+#xp .licbtn{display:flex;align-items:center;gap:10px;width:100%;margin-top:8px;padding:10px 12px;border-radius:12px;color:#fff;text-align:left;background:linear-gradient(120deg,rgba(255,227,107,.25),rgba(255,255,255,.04));border:1px solid rgba(255,227,107,.55);font-size:18px;font-weight:800;font-style:italic}
+#xp .licbtn b{font-size:26px}#xp .licbtn span{flex:1}#xp .licbtn small{font-size:13px;color:#ffe9a6;font-style:normal}
+#xp .lics{display:flex;flex-direction:column;gap:10px;margin-top:8px}
+#xp .lc{border-radius:12px;padding:8px;background:linear-gradient(140deg,color-mix(in srgb,var(--lc) 22%,transparent),rgba(255,255,255,.03));border:1px solid color-mix(in srgb,var(--lc) 55%,transparent)}
+#xp .lc.gold{border:2px solid #ffe36b;box-shadow:0 0 14px rgba(255,227,107,.35)}
+#xp .lc.lock{filter:saturate(.2) brightness(.7)}
+#xp .lh{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:2px 4px 6px}
+#xp .lh h3{font-size:19px;font-style:italic;font-weight:800;color:var(--lc)}
+#xp .lh span{font-size:12px;font-weight:800;color:#e6ebf1;text-align:right}
+#xp .lt{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:7px 8px;margin-top:4px;border-radius:8px;color:#fff;background:rgba(0,0,0,.28)}
+#xp .lt>b{font-size:22px;width:28px;text-align:center}#xp .lt>div{flex:1;min-width:0}#xp .lt>i{font-style:normal;color:#9fb2c4}
+#xp .lt h4{font-size:15px;font-weight:800}#xp .lt p{font-size:12px;color:#b9c4cf;font-weight:600}
+#xp .lmed{display:flex;gap:10px;margin-top:14px}
+#xp .lmed div{flex:1;text-align:center;padding:12px 4px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);opacity:.45}
+#xp .lmed div.on{opacity:1;border-color:#ffe36b;background:rgba(255,227,107,.12)}
+#xp .lmed b{display:block;font-size:34px}#xp .lmed span{font-size:16px;font-weight:800}
+#xp .lw{margin-top:10px;padding:10px;border-radius:10px;background:rgba(61,255,138,.12);border:1px solid rgba(61,255,138,.5);font-size:16px;font-weight:800;text-align:center}
+#xp .lw.g{background:rgba(255,227,107,.14);border-color:#ffe36b}
+#xp .bar .go{background:#e1251b}
 `; document.head.appendChild(st); })();
 function eventMenuHTML(a) {
   const w = weekInfo(), best = eventBest(), m = w.mod;
@@ -7483,7 +7618,7 @@ function frame(now) {
   if (tut && !paused) dt *= tutTick(dt);
   if (slowT > 0 && !paused) { slowT -= raw; dt *= 0.32; }   // cámara lenta al cruzar la meta
   if (hitStop > 0 && !paused) { hitStop -= raw; dt *= 0.04; }   // micro-pausa en un choque fuerte
-  try { if (introPhase) introTick(dt); if (!paused) { update(dt); if (ttMode) ttTick(); } render(); try { musicTick(); } catch(e) {} }
+  try { if (introPhase) introTick(dt); if (!paused) { update(dt); if (ttMode) ttTick(); if (licMode) licTick(); } render(); try { musicTick(); } catch(e) {} }
   catch (e) { errCount++; lastErr = String(e && e.message || e); lastErrT = performance.now(); if (errCount < 5) console.error(e); try { ctx.restore(); ctx.restore(); } catch(_) {} }
   syncMenu(dt); syncRes(dt);
   showErr();
@@ -7527,6 +7662,7 @@ try { if (!introSeen() && localStorage.getItem('driftloop_champgo') !== '1') sho
   state = 'menu'; stateT = 0; resetRace();
 })();
 try { const dg = localStorage.getItem('driftloop_dailygo'); if (dg) { localStorage.removeItem('driftloop_dailygo'); introMark(); if (introPhase === 'splash') { spEl.style.display = 'none'; introPhase = null; } if (TRACK_KEY === 'diaria') setTimeout(() => dailyGo(dg), 350); } } catch(e) {}
+try { const lg = localStorage.getItem('driftloop_licgo'); if (lg) { localStorage.removeItem('driftloop_licgo'); if (LIC_TESTS.some(t => t.id === lg)) { introMark(); if (introPhase === 'splash') { spEl.style.display = 'none'; introPhase = null; } setTimeout(() => startLic(lg), 350); } } } catch(e) {}
 try { const rq = localStorage.getItem('driftloop_reqgo'); if (rq) { localStorage.removeItem('driftloop_reqgo'); if (REQ_EVENTS.some(e => e.id === rq)) { introMark(); if (introPhase === 'splash') { spEl.style.display = 'none'; introPhase = null; } setTimeout(() => startReq(rq), 350); } } } catch(e) {}
 try { if (localStorage.getItem('driftloop_evgo') === '1') { localStorage.removeItem('driftloop_evgo'); introMark(); if (introPhase === 'splash') { spEl.style.display = 'none'; introPhase = null; } setTimeout(startEvent, 350); } } catch(e) {}
 setInterval(() => { try { if (state === 'menu' && menuShown && !introPhase && !panelOpen && !paused && !garageOpen && prof.tut && bkEl.style.display !== 'flex') { const r = checkStreak(); if (r) showStreak(r); else { const g = troSum(troCheck()); if (g.length) toast(g); } } } catch(e) {} }, 2000);
