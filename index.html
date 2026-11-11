@@ -199,7 +199,10 @@ const I18N_EN = {
   'Mantené apretado: acelerás a fondo': 'Hold: full throttle', 'MÁX': 'MAX', 'Pegate atrás de un rival: rebufo': 'Tuck in behind a rival: slipstream',
   'Si entrás pasado, la cola se va': 'Enter too fast and the rear steps out', 'Soltá: freno motor': 'Let go: engine braking', 'R: marcha atrás': 'R: reverse',
   'Tocá para cambiar': 'Tap to change', '◀ MANTENÉ R': '◀ HOLD R', '¡EMPIEZA A NEVAR!': 'IT STARTS SNOWING!', 'VICTORIAS': 'WINS', 'CARRERA': 'RACE', 'CARRERAS': 'RACES', 'QUEDAN': 'LEFT', 'VISTA PREVIA': 'PREVIEW', 'Arrastrá para girar el auto': 'Drag to spin the car', 'COPAS': 'CUPS', 'VUELTA': 'LAP', 'VUELTAS': 'LAPS',
-  'en pista': 'on track', 'CIRCUITO DEL DÍA': 'DAILY TRACK', '⚠ MOTOR TOCADO': '⚠ ENGINE DAMAGED', 'Español': 'Español', 'English': 'English'
+  'en pista': 'on track', 'CIRCUITO DEL DÍA': 'DAILY TRACK', '⚠ MOTOR TOCADO': '⚠ ENGINE DAMAGED', 'Español': 'Español', 'English': 'English',
+  'SIGUIENTE ▶': 'NEXT ▶', 'CARGANDO CIRCUITO…': 'LOADING TRACK…', '☁ SE VIENE LA NIEVE…': '☁ SNOW IS COMING…', 'Del día ×2': 'Daily ×2', 'En curso': 'In progress', 'SIGUE': 'NEXT',
+  'Subí al podio para ganar el trofeo.': 'Finish on the podium to win the trophy.', 'Choques, derrapes y cambios de marcha': 'Crashes, drifts and gear shifts',
+  'PRÓXIMA META': 'NEXT GOAL', 'DUPLICAR PREMIO': 'DOUBLE PRIZE', 'PREMIO DUPLICADO': 'PRIZE DOUBLED', 'RECUPERAR RACHA': 'RESTORE STREAK', 'JUGALO GRATIS': 'PLAY IT FREE'
 };
 
 // títulos partidos en dos colores: texto completo → [parte blanca, parte de color]
@@ -217,6 +220,10 @@ const DAILY_B = { 'del Prado': 'Meadow', 'de los Álamos': 'Poplar', 'del Molino
 function ordEN(n) { n = +n; const s = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th'; return n + s; }
 const T = s => tr(s);
 const I18N_RX = [
+  [/^1er podio de hoy (.+)$/, (m, a) => 'First podium today ' + a],
+  [/^carrera (\d+) de (\d+)$/, (m, a, b) => `race ${a} of ${b}`], [/^tu mejor: (.+)$/, (m, a) => 'your best: ' + T(a)],
+  [/^Tenés la Copa (.+) en curso: si empezás esta, se abandona\.$/, (m, a) => `The ${T(a)} Cup is in progress: starting this one abandons it.`],
+  [/^Ya te alcanza para (.+)\.$/, (m, a) => `You can afford ${T(a)} now.`],
   [/^VUELTA (\d+)\/(\d+)$/, (m, a, b) => `LAP ${a}/${b}`],
   [/^VUELTA ([\d.:]+s?)$/, (m, a) => 'LAP ' + a],
   [/^VUELTA ([\d.:]+s)  ([+-][\d.]+)$/, (m, a, b) => `LAP ${a}  ${b}`],
@@ -306,6 +313,7 @@ const I18N_RX = [
   [/^(🌀|🌧|🚀|🥇|🏆|💨|🏅|⏱|📅|🌟|🔧|🧊|👑|☠|✨|🟫|🗺|🚗|💎|🔴|🟢|🟣) LOGRO COMPLETADO$/, (m, a) => a + ' ACHIEVEMENT UNLOCKED'],
   [/^(🥉|🥈|🥇) ¡(BRONCE|PLATA|ORO)!$/, (m, a, b) => `${a} ${T(b)}!`],
   [/^(\S+) (BRONCE|PLATA|ORO)$/, (m, a, b) => `${a} ${T(b)}`],
+  [/^(.+) nivel (\d+)$/, (m, a, b) => `${T(a)} level ${b}`],
   [/^(Curvas|Anillo|Ruta|Trazado|Circuito|Rulo|Serpiente|Garganta) (del? .+|de l[ao]s? .+)$/, (m, a, b) => DAILY_B[b] ? DAILY_B[b] + ' ' + DAILY_A[a] : m]
 ];
 
@@ -324,6 +332,7 @@ function trCore(s) {
 }
 function tr(s) {
   if (!EN || typeof s !== 'string' || !s) return s;
+  if (!/\p{L}/u.test(s)) return s;   // números, tiempos y símbolos no se traducen (ni llenan la caché)
   let r = I18N_CACHE.get(s); if (r !== undefined) return r;
   const m = s.match(/^(\s*)([\s\S]*?)(\s*)$/);
   r = m[2] ? m[1] + trCore(m[2]) + m[3] : s;
@@ -621,9 +630,12 @@ const SUN = { x: 0.6, y: 0.8 };            // dirección de las sombras en el mu
    ===================================================================== */
 var FXL = (function () {
   try { const q = (JSON.parse(localStorage.getItem('driftloop_profile')) || {}).set || {}; if (q.quality === 'ahorro') return 1;
-        const cap = +localStorage.getItem('driftloop_fxl'); return cap >= 1 && cap <= 3 ? cap : 3; } catch(e) { return 3; }
+        const pp = String(localStorage.getItem('driftloop_fxl') || '').split('|'), cap = +pp[0], at = +pp[1] || 0;
+        if (!(cap >= 1 && cap <= 3)) return 3;
+        if (cap < 3 && Date.now() - at > 3*86400000) { localStorage.setItem('driftloop_fxl', (cap + 1) + '|' + Date.now()); return cap + 1; }   // cada 3 días prueba un escalón más
+        return cap; } catch(e) { return 3; }
 })();
-function fxDown() { if (FXL <= 1) return false; FXL--; try { localStorage.setItem('driftloop_fxl', FXL); } catch(e) {} return true; }
+function fxDown() { if (FXL <= 1) return false; FXL--; try { localStorage.setItem('driftloop_fxl', FXL + '|' + Date.now()); } catch(e) {} return true; }
 // ---- brillo: lo más claro de la imagen se difumina y se suma encima ----
 let bloomC = null, bloomG = null;
 const BLOOM_OK = (function () { try { const g = document.createElement('canvas').getContext('2d'); return 'filter' in g; } catch(e) { return false; } })();
@@ -720,6 +732,64 @@ function vibrate(ms) { if (CALIB) return;
   const H = NP('Haptics');
   if (H) { (ms > 55 ? H.impact({ style: 'HEAVY' }) : H.vibrate({ duration: Math.round(ms) })).catch(() => {}); return; }
   try { navigator.vibrate && navigator.vibrate(ms); } catch(e) {}
+}
+// toques suaves: cambios de marcha, pianos, derrapes, semáforo (respetan la opción Vibración)
+let hapLast = 0;
+function hap(kind) {
+  if (CALIB || !SET.vib || replayOn || introPhase || document.hidden) return;
+  const now = performance.now(), strong = kind === 'heavy' || kind === 'ok';
+  if (!strong && now - hapLast < 45) return; hapLast = now;
+  try {
+    const H = NP('Haptics');
+    if (H) { (kind === 'ok' ? H.notification({ type: 'SUCCESS' }) : H.impact({ style: kind === 'heavy' ? 'HEAVY' : kind === 'medium' ? 'MEDIUM' : 'LIGHT' })).catch(() => {}); return; }
+    if (navigator.vibrate && navigator.userActivation && navigator.userActivation.hasBeenActive) navigator.vibrate(kind === 'heavy' ? 28 : kind === 'ok' ? [12, 40, 18] : kind === 'medium' ? 14 : 7);
+  } catch(e) {}
+}
+/* =====================================================================
+   ANUNCIOS CON RECOMPENSA (AdMob por Capacitor, plugin @capacitor-community/admob).
+   Si el plugin no está instalado (página web o app sin AdMob) no aparece ningún botón.
+   ===================================================================== */
+const ADS = { ok: false, ready: false, loading: false, busy: false, test: true,          // test: true = anuncios de prueba
+              unit: 'ca-app-pub-3940256099942544/5224354917' };                           // ← ID de prueba de Google: cambiar por el tuyo
+async function adsInit() { const A = NP('AdMob'); if (!A || ADS.ok) return; try { await A.initialize({ initializeForTesting: ADS.test }); ADS.ok = true; adsLoad(); } catch(e) {} }
+async function adsLoad() {
+  const A = NP('AdMob'); if (!A || !ADS.ok || ADS.ready || ADS.loading) return;
+  ADS.loading = true; try { await A.prepareRewardVideoAd({ adId: ADS.unit, isTesting: ADS.test }); ADS.ready = true; } catch(e) {} ADS.loading = false;
+}
+function adsReady() { return ADS.ok && ADS.ready && !ADS.busy; }
+// muestra el anuncio; devuelve true solo si lo vio entero
+async function adsShow() {
+  const A = NP('AdMob'); if (!A || !adsReady()) return false;
+  ADS.busy = true; ADS.ready = false; let ok = false; const subs = [];
+  try {
+    ok = await new Promise(res => {
+      let got = false;
+      const on = (ev, fn) => { try { const h = A.addListener(ev, fn); subs.push(h); } catch(e) {} };
+      on('onRewardedVideoAdReward', () => { got = true; });
+      on('onRewardedVideoAdDismissed', () => setTimeout(() => res(got), 400));
+      on('onRewardedVideoAdFailedToShow', () => res(false));
+      A.showRewardVideoAd().then(() => { got = true; }).catch(() => res(false));
+      setTimeout(() => res(got), 120000);
+    });
+  } catch(e) {}
+  for (const h of subs) try { Promise.resolve(h).then(x => x && x.remove && x.remove()); } catch(e) {}
+  ADS.busy = false; setTimeout(adsLoad, 800);
+  try { if (AU.ok) AU.ac.resume(); } catch(e) {} last = performance.now();
+  return ok;
+}
+if (NATIVE) setTimeout(adsInit, 3000);
+function adsCanDouble() { const d = prof.adx || {}; return adsReady() && (player.earn || 0) > 0 && !player.x2 && !(d.d === todayKey() && d.n >= 5); }
+async function adsDouble(btn) {
+  if (!adsCanDouble()) return;
+  btn.disabled = true; const race = player, amt = player.earn;
+  const ok = await adsShow();
+  if (!ok || race !== player || race.x2) { btn.disabled = false; return; }
+  race.x2 = true; prof.money += amt; prof.earned = (prof.earned || 0) + amt;
+  const k = todayKey(), d = prof.adx && prof.adx.d === k ? prof.adx : { d: k, n: 0 }; d.n++; prof.adx = d; saveProf();
+  btn.textContent = '✓ PREMIO DUPLICADO'; btn.classList.add('done'); btn.disabled = true;
+  const e = rEl.querySelector('#rEarn'); if (e) e.textContent = '+' + fmtMoney(amt*2);
+  const sp = rEl.querySelector('.earn .big span'); if (sp) sp.textContent = 'EN TU CUENTA ' + fmtMoney(prof.money);
+  sfxBoost(0.6);
 }
 function nativeSay(text, prio) {
   const T = NP('TextToSpeech'); if (!T) return false;
@@ -2043,7 +2113,7 @@ function audioUpdate(dt, held) {
   else if (p.reverse) { target = 1400 + vr*30000; ENG.gear = 0; ENG.load += (1 - ENG.load)*Math.min(1, dt*8); }
   else {
     let g = ENG.gear, r = rpmFor(vr, g);
-    if (r > 7800 && g < GEARS.length - 1) { g++; ENG.shiftT = 0.12; p.popFx = 0.14; if (Math.random() < 0.6) sfxPop(); }
+    if (r > 7800 && g < GEARS.length - 1) { g++; ENG.shiftT = 0.12; p.popFx = 0.14; if (Math.random() < 0.6) sfxPop(); if (state === 'race') hap('light'); }
     else if (g > 0 && r < 3700) g--;
     ENG.gear = g; r = rpmFor(vr, g);
     if (g === 0 && thr) r = Math.max(r, 3000 + vr*20000);
@@ -2173,6 +2243,7 @@ function setMute(m) { AU.muted = m; try { localStorage.setItem('driftloop_mute',
 let state = 'menu', stateT = 0, animT = 0, countdown = 0;
 let cars = [], player = null, raceTime = 0, LAPS = 3;
 let shake = 0, shownPos = 0, posPendT = 0, resultsReady = false;
+let kickX = 0, kickY = 0, hitStop = 0, curbHapT = 0, skidHapT = 0;   // golpe de cámara con dirección, micro-pausa en choques fuertes y ritmo de los toques hápticos
 const rec = { bestRace: 0, bestLap: 0, wins: 0 };
 const RSFX = TRACK_KEY === 'autodromo' ? '' : '_' + TRACK_KEY + (TRACK_KEY === 'diaria' && DAILY ? '_' + DAILY.date : '');   // récords separados por circuito
 try { rec.bestRace = +localStorage.getItem('driftloop_bestrace' + RSFX) || 0; rec.bestLap = +localStorage.getItem('driftloop_bestlap2' + RSFX) || 0; rec.wins = +localStorage.getItem('driftloop_wins') || 0; } catch(e) {}
@@ -2252,6 +2323,7 @@ function resetRace() {
   raceTime = 0; shownPos = 0; posPendT = 0; resultsReady = false; newRaceRec = false; newLapRec = false;
   skN = 0; skHead = 0; parts.length = 0; popups.length = 0;
   for (const c of cars) placeCar(c);
+  kickX = kickY = 0; hitStop = 0;
   p2 = null; if (duoMode) duoSetup();
   if (eventMode) eventApplyMods();
   cam.x = player.wx; cam.y = player.wy; cam.ang = sample(0, tA).ang;
@@ -2311,7 +2383,11 @@ function damageSmoke(c, dt) {
 }
 function impact(power, x, y, mine) {
   const near = nearCam(x, y, 500);
-  if (mine) { shake = Math.max(shake, Math.min(24, power*0.05)*C.vibracionCamara); drOnImpact(power); }
+  if (mine) { shake = Math.max(shake, Math.min(14, power*0.03)*C.vibracionCamara); drOnImpact(power);
+    // golpe con dirección: la imagen se sacude hacia donde te empujó el choque
+    const dx = player.x - x, dy = player.y - y, dl = Math.hypot(dx, dy) || 1, kk = Math.min(16, power*0.035)*C.vibracionCamara;
+    kickX += dx/dl*kk; kickY += dy/dl*kk; const km = Math.hypot(kickX, kickY); if (km > 22) { kickX *= 22/km; kickY *= 22/km; }
+    if (power > 240 && !CALIB && !duoMode && state === 'race') hitStop = 0.055; }
   else if (near) shake = Math.max(shake, Math.min(10, power*0.02)*C.vibracionCamara);
   if (near) for (let i = 0; i < Math.min(18, 4 + power/30); i++) part(x, y, rand(-220, 220), rand(-220, 220), rand(0.2, 0.45), rand(2, 4), '#ffcf5a', 0);
   if (mine || near) sfxCrash(mine ? power : power*0.4);
@@ -2609,8 +2685,8 @@ function cornerCheck(c, k, onGrass) {
   if (ak < 1/650) {
     corner.in = false;
     if (corner.bad) return;
-    if (corner.drift > 0.22) { popup('¡DRIFT! ' + Math.round(corner.drift*57) + '°', '#5fd8ff', true); sfxBlip(660, 0.08); c.bonus = (c.bonus || 0) + 1; if (c.st) c.st.drifts++; }
-    else if (corner.max >= 0.85) { popup('¡CURVA PERFECTA!', '#7dffb0', true); sfxBlip(880, 0.08); c.bonus = (c.bonus || 0) + 1; if (c.st) c.st.perfects++; }
+    if (corner.drift > 0.22) { popup('¡DRIFT! ' + Math.round(corner.drift*57) + '°', '#5fd8ff', true); sfxBlip(660, 0.08); hap('medium'); c.bonus = (c.bonus || 0) + 1; if (c.st) c.st.drifts++; }
+    else if (corner.max >= 0.85) { popup('¡CURVA PERFECTA!', '#7dffb0', true); sfxBlip(880, 0.08); hap('ok'); c.bonus = (c.bonus || 0) + 1; if (c.st) c.st.perfects++; }
   }
 }
 
@@ -2629,7 +2705,7 @@ function onLap(c, ld) {
     else popup('Vuelta ' + lt.toFixed(2) + 's', '#ffffff');
     if (elimMode) { if (cars.length > 1) popup('VUELTA ' + (c.lapsDone + 1), '#ffffff', true); }
     else if (c.lapsDone === LAPS - 1) banner('ÚLTIMA VUELTA', '¡A FONDO HASTA LA META!', 'rgba(225,37,27,.95)'); else popup('VUELTA ' + (c.lapsDone + 1) + '/' + LAPS, '#ffffff', true);
-    sfxBlip(990, 0.15);
+    sfxBlip(990, 0.15); hap('medium');
   }
 }
 
@@ -2648,7 +2724,9 @@ function playerFinished() {
   const PRIZES = [1500, 1000, 750, 550, 400, 300, 250, 200, 150, 120, 100, 80];
   // más vueltas y circuitos de copas más altas pagan más
   const lapF = Math.max(0.7, Math.min(2.6, LAPS/3)), tierF = 1 + Math.max(0, CUP_KEYS.indexOf(champRace && prof.champ ? prof.champ.cup : trackCup(TRACK_KEY)))*0.3;
-  const placeP = Math.round(PRIZES[Math.min(PRIZES.length - 1, player.pos - 1)]*lapF*tierF/10)*10;
+  // más rivales y más dificultad pagan más (antes Fácil con 3 rivales pagaba igual que Difícil con 7)
+  const fieldF = tut ? 1 : Math.max(0.8, Math.min(1.2, 0.4 + cars.length*0.1)), diffF = tut ? 1 : SET.diff === 'facil' ? 0.85 : SET.diff === 'dificil' ? 1.2 : 1;
+  const placeP = Math.round(PRIZES[Math.min(PRIZES.length - 1, player.pos - 1)]*lapF*tierF*fieldF*diffF/10)*10;
   player.earn = placeP + (player.bonus || 0)*30 + (newLapRec ? 300 : 0);
   player.earnParts = { puesto: placeP, drifts: player.bonus || 0, rec: newLapRec, mult: WX.pay };
   player.earn = Math.round(player.earn*WX.pay);
@@ -2656,7 +2734,7 @@ function playerFinished() {
     if (player.pos <= 3 && prof.dailyPod !== (DAILY && DAILY.date)) { prof.dailyPod = DAILY && DAILY.date; player.earn += 1000; player.earnParts.dailyPod = true; } }
   prof.money += player.earn; prof.earned = (prof.earned || 0) + player.earn; saveProf();
   if (eventMode) eventReward();
-  if (NATIVE && !prof.notifAsked) setTimeout(nativeAskNotif, 5000);
+  if (NATIVE && !prof.notifAsked && prof.stats.races >= 1) setTimeout(nativeAskNotif, 6000);   // recién en la segunda carrera
   sfxBlip(player.pos === 1 ? 1320 : 520, 0.4);
   player.xpGain = addXP(raceXP()*(eventMode ? 2 : 1));
   afterRace();
@@ -2773,7 +2851,7 @@ const PRESETS = [
 ];
 let camPreset = 0, camT = 5;
 function updateCamera(dt) {
-  const m = C.movimientoDrone;
+  const m = C.movimientoDrone; let camFast = false;
   camT -= dt;
   if (camT <= 0) { camT = rand(4.5, 8); let n; do n = (Math.random()*PRESETS.length)|0; while (n === camPreset); camPreset = n; }
   let tg = PRESETS[camPreset];
@@ -2784,16 +2862,20 @@ function updateCamera(dt) {
   else if (state === 'countdown') tg = { ax: 0.5, ay: 0.6, ao: 0.35*Math.sin(animT*0.5), z: 0.85 };
   else if (state === 'finish') tg = { ax: 0.5, ay: 0.55, ao: animT*0.35, z: 1.15 };
   else if (m <= 0 || DUO) tg = DUO ? { ax: 0.5, ay: 0.5, ao: 0, z: 1 } : PRESETS[0];
-  const r = Math.min(1, dt*0.9);
+  else if (state === 'race') {   // llegando a una curva o doblando: el drone vuelve atrás del auto para que se lea el trazado (los ángulos de costado quedan para las rectas)
+    const s0 = mod(player.dist);
+    if (warn || Math.abs(sample(s0, tD).k) > 1/560 || Math.abs(sample(s0 + 90 + player.v*0.8, tD).k) > 1/560) { tg = { ax: 0.5, ay: 0.70, ao: 0, z: Math.max(0.86, Math.min(1.06, tg.z)) }; camFast = true; }
+  }
+  const r = Math.min(1, dt*(camFast ? 2.4 : 0.9));
   cam.ax += (tg.ax - cam.ax)*r; cam.ay += (tg.ay - cam.ay)*r; cam.zm += (tg.z - cam.zm)*r;
   cam.ao += angDiff(tg.ao, cam.ao)*r;
   // posición con algo de inercia, mirando un poco adelante
   const fx = Math.cos(fc.va), fy = Math.sin(fc.va);
-  const tx = fc.wx + fx*25, ty = fc.wy + fy*25;
+  const la = 25 + 55*Math.min(1, (fc.v || 0)/C.velocidadMaxima), tx = fc.wx + fx*la, ty = fc.wy + fy*la;   // mira más adelante cuanto más rápido vas
   cam.x += (tx - cam.x)*Math.min(1, dt*7); cam.y += (ty - cam.y)*Math.min(1, dt*7);
   sample(mod(fc.dist) + 70, tA);
   cam.ang += angDiff(tA.ang, cam.ang)*Math.min(1, dt*3);
-  let zt = (W/430)*(1 - 0.2*fc.v/C.velocidadMaxima)*cam.zm;
+  let zt = (W/430)*(1 - 0.2*fc.v/C.velocidadMaxima)*cam.zm*(state === 'race' && player.boostT > 0 ? 0.94 : 1);   // el turbo abre el plano
   if (DUO) zt = Math.max(W/1250, Math.min(zt*0.9, Math.min(W, H)*0.56/(duoSep() + 1)));
   cam.zoom += (zt - cam.zoom)*Math.min(1, dt*3);
 }
@@ -2836,12 +2918,12 @@ function update(dt) {
     if (duoMode) { if (held2 && LAUNCH2.pressCd === null) LAUNCH2.pressCd = countdown; if (!held2) LAUNCH2.pressCd = null; }
     const prev = Math.ceil(countdown - 0.4); countdown -= dt;
     const now = Math.ceil(countdown - 0.4);
-    if (now !== prev && now > 0) sfxBlip(440, 0.15);
+    if (now !== prev && now > 0) { sfxBlip(440, 0.15); hap('light'); }
     if (countdown <= 0) {
-      state = 'race'; stateT = 0; raceTime = 0; sfxBlip(880, 0.3);
+      state = 'race'; stateT = 0; raceTime = 0; sfxBlip(880, 0.3); hap('medium');
       // largada estilo Mario Kart: apretar justo antes del verde = turbo; demasiado temprano = se ahoga
       const pc = held ? LAUNCH.pressCd : null, vm = C.velocidadMaxima;
-      if (pc !== null && pc >= 0.12 && pc <= 0.6) { giveSpeed(player, vm*0.45); player.boostT = 1.6; if (player.st) player.st.perfectStart = true; popup('¡SALIDA PERFECTA!', '#ffd23f', true); sfxBoost(1); shake = Math.max(shake, 5); }
+      if (pc !== null && pc >= 0.12 && pc <= 0.6) { giveSpeed(player, vm*0.45); player.boostT = 1.6; if (player.st) player.st.perfectStart = true; popup('¡SALIDA PERFECTA!', '#ffd23f', true); sfxBoost(1); shake = Math.max(shake, 5); hap('heavy'); }
       else if (pc !== null && pc > 0.6 && pc <= 1.05) { giveSpeed(player, vm*0.3); player.boostT = 0.7; popup('¡BUENA SALIDA!', '#7dffb0', true); sfxBoost(0.6); }
       else if (pc !== null && pc > 1.6) { player.stallT = 1.0; popup('¡PASADO DE VUELTAS!', '#ff5a4a', true); }
       else if (held) giveSpeed(player, 70);
@@ -2892,7 +2974,7 @@ function update(dt) {
         if (posPendT > 0.35) {
           const better = player.pos < shownPos; if (better && player.st) player.st.overtakes += shownPos - player.pos; shownPos = player.pos; posPendT = 0;
           popup((better ? '▲ P' : '▼ P') + player.pos, better ? '#7dffb0' : '#ff8a7a', better);
-          sfxBlip(better ? 760 : 300, 0.1);
+          sfxBlip(better ? 760 : 300, 0.1); if (better) hap('medium');
         }
       } else posPendT = 0;
     }
@@ -2914,8 +2996,10 @@ function update(dt) {
   updateCamera(dt);
   if (player.popFx > 0) player.popFx -= dt;
   if (state === 'race' && player.st) player.st.maxKmh = Math.max(player.st.maxKmh, player.v/C.velocidadMaxima*280);
-  if (state === 'race' && !player.onGrass && Math.abs(player.d) > HALF_W - 4 && player.v > 150 && Math.abs(sample(mod(player.dist), tA).k) > 1/700) shake = Math.max(shake, 1.2*C.vibracionCamara);
+  if (state === 'race' && !player.onGrass && Math.abs(player.d) > HALF_W - 4 && player.v > 150 && Math.abs(sample(mod(player.dist), tA).k) > 1/700) { shake = Math.max(shake, 1.2*C.vibracionCamara); if ((curbHapT -= dt) <= 0) { curbHapT = 0.09; hap('light'); } }
+  if (state === 'race' && !duoMode && player.skid > 0.55 && player.v > 140 && !player.onGrass && (skidHapT -= dt) <= 0) { skidHapT = 0.16; hap('light'); }
   shake *= Math.exp(-7*dt); if (shake < 0.05) shake = 0;
+  { const kd = Math.exp(-11*dt); kickX *= kd; kickY *= kd; }
   try { audioUpdate(dt, held); } catch(e) {}
   rpRecord();
 }
@@ -2976,7 +3060,7 @@ function render() {
   processBake(introBake ? 900 : missing ? 10 : 3); introBake = false;
 
   ctx.save();
-  ctx.translate(W*v.ax + sx, H*cam.ay + sy); ctx.scale(z, z); ctx.rotate(-cam.ang - Math.PI/2 + v.ao); ctx.translate(-cam.x, -cam.y);
+  ctx.translate(W*v.ax + sx, H*cam.ay + sy); ctx.scale(z, z); ctx.rotate(-cam.ang - Math.PI/2 + v.ao); ctx.translate(-cam.x + kickX, -cam.y + kickY);
   viewM = ctx.getTransform();
 
   if (missing) {
@@ -4000,7 +4084,7 @@ function pRender() {
   row('#pSnd', 'Música', '', slider('music'));
   row('#pSnd', 'Locutor', 'Anuncia la última vuelta, récords y resultados', toggle('voice'));
   row('#pSnd', 'Voz del locutor', '', seg('vgen', [['f', 'MUJER'], ['m', 'HOMBRE']], () => { VOICE.v = null; VOICE.nat = null; setTimeout(() => say(EN ? 'Final lap' : 'Última vuelta', true), 200); }));
-  row('#pGame', 'Vibración', 'En choques', toggle('vib'));
+  row('#pGame', 'Vibración', 'Choques, derrapes y cambios de marcha', toggle('vib'));
   row('#pGame', 'Cámara drone', 'Apagada = cámara fija detrás del auto', toggle('drone', () => { C.movimientoDrone = SET.drone ? 1 : 0; }));
   row('#pGame', 'Nombres de los autos', '', toggle('names'));
   row('#pGame', 'Aviso ¡SOLTÁ!', 'Te avisa cuándo frenar', toggle('warn'));
@@ -4324,6 +4408,8 @@ function resRender() {
     ${(player.awards || []).length ? `<div class="aw${a(0.36)}">` + player.awards.map(g => `<div><b>${g.ico} ${g.kind}</b> ${g.txt}<i>+${fmtMoney(g.pay)}</i></div>`).join('') + '</div>' : ''}
     ${player.champInfo ? `<div class="cp${a(0.38)}"><b>COPA ${CUPS[player.champInfo.cup].name}</b> +${player.champInfo.pts} pts · ${player.champInfo.last ? 'última carrera' : 'carrera ' + (player.champInfo.round + 1) + ' de ' + CHAMP.length}
        <span>${(player.champInfo.final ? player.champInfo.final.standings : champStandings()).slice(0, 3).map((e, i) => (i + 1) + '° ' + (e.name === 'VOS' ? 'VOS' : e.name) + ' ' + e.pts).join(' · ')}</span></div>` : ''}
+    ${adsCanDouble() ? `<button class="adx${a(0.35)}" data-a="x2">🎬 DUPLICAR PREMIO · +${fmtMoney(player.earn)}</button>` : ''}
+    ${nextGoalHTML(a(0.37))}
     ${rpAvailable() ? `<div class="rpb${a(0.38)}"><button data-a="rp">🎬 REPETICIÓN</button><button data-a="clip">📲 GUARDAR CLIP</button></div>` : ''}
     <div class="bt${a(0.4)}">${player.champInfo
       ? (player.champInfo.last ? '<button class="go gold" data-a="final">VER RESULTADO 🏆</button>' : '<button class="go" data-a="next">SIGUIENTE ▶</button>') + '<button class="s" data-a="menu">MENÚ</button>'
@@ -4331,6 +4417,7 @@ function resRender() {
   resPodium();
   rEl.querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
     initAudio(); const act = b.dataset.a;
+    if (act === 'x2') { adsDouble(b); return; }
     if (act === 'rp' || act === 'clip') { startReplay(act === 'clip'); return; }
     hideRes();
     if (act === 'again') { resetRace(); startCountdown(); }
@@ -4344,6 +4431,24 @@ function resRender() {
   (function count() { if (!resShown) return; const k = Math.min(1, (performance.now() - t0 - 500)/1100), v = Math.round(target*Math.max(0, 1 - Math.pow(1 - Math.max(0, k), 3)));
     const e = rEl.querySelector('#rEarn'); if (e) e.textContent = '+' + fmtMoney(v); if (k < 1) { if (Math.random() < 0.3) sfxBlip(1200 + Math.random()*400, 0.03); requestAnimationFrame(count); } })();
 }
+// próxima meta: lo más cercano que podés comprar o desbloquear (tocarla abre el garaje)
+function nextGoalHTML(a) {
+  const lines = [], need = c => prof.money >= c.cost ? 'Ya te alcanza para ' + c.name + '.' : 'Te faltan ' + fmtMoney(c.cost - prof.money) + ' para ' + c.name + '.';
+  let car = null, up = null;
+  for (const k of MODEL_KEYS) { const m = MODELS[k]; if (prof.owned[k] || (m.lvl && (prof.lvl || 1) < m.lvl)) continue; if (!car || m.price < car.cost) car = { cost: m.price, name: m.name }; }
+  for (const u of UPGRADES) { const l = prof.upg[u.k] || 0; if (l >= UPG_MAX) continue; const c = upgCost(u, l); if (!up || c < up.cost) up = { cost: c, name: u.name + ' nivel ' + (l + 1) }; }
+  if (up) lines.push(need(up)); if (car) lines.push(need(car));
+  const nx = Object.keys(LEVEL_UNLOCKS).map(Number).find(l => l > (prof.lvl || 1));
+  if (nx) lines.push('Nivel ' + nx + ' · 🔓 ' + LEVEL_UNLOCKS[nx]);
+  if (!lines.length) return '';
+  return `<button class="ng${a || ''}" data-a="gar"><b>🎯 PRÓXIMA META</b>${lines.slice(0, 3).map(l => `<span>${l}</span>`).join('')}</button>`;
+}
+(function () { const st = document.createElement('style'); st.textContent = `
+#res .ng{display:block;width:calc(100% - 24px);margin:8px 12px 0;padding:8px 12px;border-radius:10px;text-align:left;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16)}
+#res .ng b{display:block;font-size:13px;letter-spacing:1.5px;color:#ffd23f;font-style:italic}
+#res .ng span{display:block;font-size:15px;font-weight:700;color:#e3e7ec;line-height:1.25}
+#res .adx{display:block;width:calc(100% - 24px);margin:8px 12px 0;height:46px;flex:none;border-radius:10px;font-size:19px;font-weight:800;font-style:italic;color:#111;background:linear-gradient(180deg,#ffd84a,#d9a400)}
+#res .adx.done{background:rgba(61,255,138,.16);color:#3dff8a}`; document.head.appendChild(st); })();
 function hideRes() { resShown = false; rEl.style.display = 'none'; }
 function syncRes(dt) {
   const want = state === 'finish' && resultsReady && stateT > 2.4 && !garageOpen && !paused && !ttMode && !elimMode && !duoMode && !driftMode && !replayOn;
@@ -4997,6 +5102,8 @@ function ttMedalCount() { let n = 0; for (const k in prof.tt) if (k !== 'diaria'
 let ghost = null, ghostRec = [], ghostRecT = -1, ghostIdx = 0, ttDelta = null, ttDeltaShow = 0, ttDeltaT = 0, ttSession = null, ttResShown = false, ghostSpr = null, ghostSprKey = '';
 const GHOST_KEY = () => 'driftloop_ghost_' + TRACK_KEY + (TRACK_KEY === 'diaria' && DAILY ? '_' + DAILY.date : '');
 function loadGhost() { try { const g = JSON.parse(localStorage.getItem(GHOST_KEY())); if (g && g.d && g.d.length > 10) return g; } catch(e) {} return null; }
+// los fantasmas restaurados de la nube vienen a 10 muestras por segundo (half): se duplican las filas antes de codificarlos
+function ghostRows(g) { return g.half ? [].concat(...g.d.map(r => [r, r])) : g.d; }
 function saveGhost(g) { try { localStorage.setItem(GHOST_KEY(), JSON.stringify(g)); } catch(e) {} }
 
 function startTT() {
@@ -5140,7 +5247,7 @@ function openTTPanel() {
   for (const k of L) {
     const cup = k === 'diaria' ? 'hoy' : trackCup(k); if (cup !== lastCup) { html += `<div class="sec">${cup === 'hoy' ? '📅 CIRCUITO DEL DÍA · CAMBIA MAÑANA' : 'COPA ' + CUPS[cup].name}</div>`; lastCup = cup; }
     const inf = ttInfo(k), T = TRACKS[k], rv = rivalInfo(k);
-    html += `<button class="ttr" data-k="${k}">${TRACK_SVG[k]}<div class="i"><b>${T.name}</b><span>${inf.best ? 'Récord ' + inf.best.toFixed(2) + 's' : 'Sin tiempo'} · ${THEME_NAME[T.theme] || ''}</span>${rv ? `<span class="rv">🤝 ${rv.name} ${rv.t.toFixed(2)}${rv.won ? ' ✓' : ''}</span>` : ''}</div>
+    html += `<button class="ttr" data-k="${k}">${TRACK_SVG[k]}<div class="i"><b>${T.name}</b><span>${inf.best ? 'Récord ' + inf.best.toFixed(2) + 's' : 'Sin tiempo'} · ${THEME_NAME[T.theme] || ''}</span>${rv ? `<span class="rv">🤝 ${esc(rv.name)} ${rv.t.toFixed(2)}${rv.won ? ' ✓' : ''}</span>` : ''}</div>
       <div class="md">${[1, 2, 3].map(i => `<i class="${inf.medal >= i ? 'on' : ''}">${MEDAL_ICO[i]}</i>`).join('')}</div></button>`;
   }
   const locked = CUP_KEYS.filter(k => !cupUnlocked(k)).length;
@@ -5204,7 +5311,7 @@ function decodeGhostData(str) {
 function challengeCode(name) {
   const g = loadGhost(), inf = ttInfo(TRACK_KEY); if (!g) return null;
   const h = { v: 1, k: TRACK_KEY, n: name, t: +g.t.toFixed(3), m: g.model, c: prof.col, L: Math.round(g.L), dt: TRACK_KEY === 'diaria' && DAILY ? DAILY.date : undefined, md: inf.medal || 0 };
-  return 'DLR1.' + b64u.enc(new TextEncoder().encode(JSON.stringify(h))) + '.' + encodeGhostData(g.d);
+  return 'DLR1.' + b64u.enc(new TextEncoder().encode(JSON.stringify(h))) + '.' + encodeGhostData(ghostRows(g));
 }
 function parseChallenge(text) {
   const m = String(text).match(/DLR1\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)/); if (!m) throw 'bad';
@@ -5223,7 +5330,7 @@ function shareText(code, t) {
 }
 function openChallengeShare() {
   const g = loadGhost(); if (!g) return;
-  const nm = (prof.name || '').replace(/"/g, '');
+  const nm = esc(prof.name || '');
   bkEl.innerHTML = `<div class="box"><h3>🤝 RETÁ A UN AMIGO</h3>
     <p>${EN ? `Your best lap at <b>${tr(TRACKS[TRACK_KEY].name)}</b> (${g.t.toFixed(2)}s) travels in this code. Your friend races your ghost: the exact same lap.` : `Tu mejor vuelta en <b>${TRACKS[TRACK_KEY].name}</b> (${g.t.toFixed(2)}s) viaja en este código. Tu amigo corre contra tu fantasma, la misma vuelta exacta.`}</p>
     <input class="nm" maxlength="12" placeholder="Tu nombre" value="${nm}">
@@ -5312,7 +5419,7 @@ function rivalOnLap(lt) {
 function rivalResultHTML() {
   if (!rghost) return '';
   const s = ttSession || {}, my = Math.min(s.best || 1e9, ttInfo(TRACK_KEY).best || 1e9), win = my < rghost.t;
-  return `<div class="sec">🤝 DESAFÍO DE ${rghost.name}</div><div class="ch"><div class="ico">${win ? '🏆' : '⏱'}</div><div class="i">${win ? '¡Le ganaste!' : 'Todavía no le ganaste'}<small>${rghost.name} ${rghost.t.toFixed(2)}s · ${my < 1e9 ? my.toFixed(2) + 's' : '--'}</small></div><div class="pay">${win ? (my - rghost.t).toFixed(2) : '+' + (my < 1e9 ? (my - rghost.t).toFixed(2) : '--')}</div></div>`;
+  return `<div class="sec">🤝 DESAFÍO DE ${esc(rghost.name)}</div><div class="ch"><div class="ico">${win ? '🏆' : '⏱'}</div><div class="i">${win ? '¡Le ganaste!' : 'Todavía no le ganaste'}<small>${esc(rghost.name)} ${rghost.t.toFixed(2)}s · ${my < 1e9 ? my.toFixed(2) + 's' : '--'}</small></div><div class="pay">${win ? (my - rghost.t).toFixed(2) : '+' + (my < 1e9 ? (my - rghost.t).toFixed(2) : '--')}</div></div>`;
 }
 
 /* =====================================================================
@@ -5340,6 +5447,8 @@ async function fbToken() {
   return fbAuth.idToken;
 }
 // valores de Firestore <-> JS
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"'`]/g, c => '&#' + c.charCodeAt(0) + ';'); }
+function hexOK(c) { return /^#[0-9a-f]{6}$/i.test(c) ? c : '#888'; }
 const fsEnc = o => { const f = {}; for (const k in o) { const v = o[k]; f[k] = typeof v === 'number' ? (Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v }) : { stringValue: String(v) }; } return { fields: f }; };
 const fsDec = d => { const o = {}, f = (d && d.fields) || {}; for (const k in f) { const v = f[k]; o[k] = 'stringValue' in v ? v.stringValue : 'integerValue' in v ? +v.integerValue : 'doubleValue' in v ? v.doubleValue : null; } return o; };
 async function fsReq(method, path, body) {
@@ -5385,7 +5494,7 @@ async function lgSyncTrack(track, onlyCode) {
   if (track === 'diaria') return 0;
   const g = lgGhostFor(track), inf = prof.tt[track]; if (!g || !inf || !inf.best) return 0;
   let n = 0;
-  for (const L of prof.leagues || []) { if (onlyCode && L.code !== onlyCode) continue; try { await lgPush(L.code, track, inf.best, encodeGhostData(g.d)); n++; } catch(e) {} }
+  for (const L of prof.leagues || []) { if (onlyCode && L.code !== onlyCode) continue; try { await lgPush(L.code, track, inf.best, encodeGhostData(ghostRows(g))); n++; } catch(e) {} }
   return n;
 }
 async function lgSyncAll(code) { let n = 0; for (const k in prof.tt) if (k !== 'diaria') n += await lgSyncTrack(k, code); return n; }
@@ -5395,36 +5504,36 @@ function lgOnRecord() { if ((prof.leagues || []).length && TRACK_KEY !== 'diaria
 let lgSel = 0, lgCache = {};
 function lgErr(e) {
   const d = e && (e.detail || (e.name === 'AbortError' ? 'timeout' : e.name === 'TypeError' ? 'red bloqueada' : String(e.message || e)));
-  return (!navigator.onLine ? 'Sin conexión a internet.' : e && e.status === 403 ? 'El servidor rechazó el pedido. Probá de nuevo.' : 'No se pudo conectar con el servidor de ligas.') + (d ? ` <small style="display:block;opacity:.7;font-size:12px">(${d})</small>` : '');
+  return (!navigator.onLine ? 'Sin conexión a internet.' : e && e.status === 403 ? 'El servidor rechazó el pedido. Probá de nuevo.' : 'No se pudo conectar con el servidor de ligas.') + (d ? ` <small style="display:block;opacity:.7;font-size:12px">(${esc(d)})</small>` : '');
 }
 function openLeaguePanel(msg) {
   prof.leagues = prof.leagues || [];
   const L = prof.leagues, cur = L[Math.min(lgSel, L.length - 1)];
-  const nameRow = `<div class="lgname"><span>Tu nombre</span><input class="nm" maxlength="12" placeholder="Tu nombre" value="${(prof.name || '').replace(/"/g, '')}"></div>`;
+  const nameRow = `<div class="lgname"><span>Tu nombre</span><input class="nm" maxlength="12" placeholder="Tu nombre" value="${esc(prof.name || '')}"></div>`;
   let body;
   if (!L.length) {
     body = `<div class="sub">Armá una liga con tus amigos: cada uno sube su mejor vuelta de contrarreloj en cada circuito y ven quién es el más rápido. Tocando un tiempo corrés contra el fantasma de esa vuelta.</div>${nameRow}
       <button class="lgbig go" data-a="new">➕ CREAR UNA LIGA</button>
       <div class="lgjoin"><input class="cd" maxlength="40" placeholder="CÓDIGO"><button data-a="join">UNIRME ▶</button></div>`;
   } else {
-    const tabs = L.map((l, i) => `<button data-t="${i}" class="${l === cur ? 'on' : ''}">${l.name}</button>`).join('') + '<button data-a="more">＋</button>';
+    const tabs = L.map((l, i) => `<button data-t="${i}" class="${l === cur ? 'on' : ''}">${esc(l.name)}</button>`).join('') + '<button data-a="more">＋</button>';
     const data = lgCache[cur.code];
     let list = '<div class="sub" style="text-align:center;margin:20px 0">Cargando tiempos…</div>';
     if (data && data.err) list = `<div class="sub" style="text-align:center;margin:20px 0;color:#ff8a7a">${data.err}</div>`;
     else if (data) {
-      const by = {}; for (const r of data.rows) if (TRACKS[r.track]) (by[r.track] = by[r.track] || []).push(r);
+      const by = Object.create(null); for (const r of data.rows) if (TRACKS[r.track] && typeof r.t === 'number' && isFinite(r.t)) (by[r.track] = by[r.track] || []).push(r);
       const keys = TRACK_KEYS.filter(k => by[k]);
       list = keys.length ? keys.map(k => {
         const rows = by[k].sort((a, b) => a.t - b.t);
         const mine = rows.findIndex(r => fbAuth && r.uid === fbAuth.uid);
         return `<div class="lgtr"><div class="h">${TRACK_SVG[k] || ''}<b>${TRACKS[k].name}</b>${mine >= 0 ? `<span>vas ${mine + 1}° de ${rows.length}</span>` : '<span class="no">sin tu tiempo</span>'}</div>
-          ${rows.slice(0, 5).map((r, i) => `<button class="lgr${fbAuth && r.uid === fbAuth.uid ? ' me' : ''}" data-g="${r.id}" data-k="${k}"><i>${['🥇', '🥈', '🥉'][i] || (i + 1) + '°'}</i><s style="background:${r.c || '#888'}"></s><em>${r.name}</em><u>${r.t.toFixed(2)}</u>${fbAuth && r.uid === fbAuth.uid ? '' : '<small>⚔</small>'}</button>`).join('')}</div>`;
+          ${rows.slice(0, 5).map((r, i) => `<button class="lgr${fbAuth && r.uid === fbAuth.uid ? ' me' : ''}" data-g="${esc(r.id)}" data-k="${k}"><i>${['🥇', '🥈', '🥉'][i] || (i + 1) + '°'}</i><s style="background:${hexOK(r.c)}"></s><em>${esc(r.name)}</em><u>${r.t.toFixed(2)}</u>${fbAuth && r.uid === fbAuth.uid ? '' : '<small>⚔</small>'}</button>`).join('')}</div>`;
       }).join('') : '<div class="sub" style="text-align:center;margin:20px 0">Todavía nadie subió tiempos. Corré una contrarreloj: tus récords se suben solos.</div>';
     }
     body = `<div class="lgtabs">${tabs}</div>
-      <div class="lgcode"><div><small>CÓDIGO DE LA LIGA</small><b>${cur.code}</b></div><a class="wa" href="${lgInviteURL(cur)}" target="_blank" rel="noopener">📲 INVITAR</a><button data-a="ref">↻</button></div>
+      <div class="lgcode"><div><small>CÓDIGO DE LA LIGA</small><b>${esc(cur.code)}</b></div><a class="wa" href="${lgInviteURL(cur)}" target="_blank" rel="noopener">📲 INVITAR</a><button data-a="ref">↻</button></div>
       ${nameRow}${list}
-      <button class="lgout" data-a="leave">Salir de «${cur.name}»</button>`;
+      <button class="lgout" data-a="leave">Salir de «${esc(cur.name)}»</button>`;
   }
   showPanel(`<div class="wrap"><h2>LI<span>GAS</span></h2>${msg ? `<div class="lgmsg">${msg}</div>` : ''}${body}</div>
     <div class="bar"><button class="s" data-a="back">VOLVER</button></div>`);
@@ -5470,8 +5579,9 @@ async function lgJoin(raw, needName) {
   if ((prof.leagues || []).some(l => l.code === code)) { lgSel = prof.leagues.findIndex(l => l.code === code); openLeaguePanel('Ya estás en esa liga.'); lgRefresh(); return; }
   try {
     const lg = await lgGet(code); if (!lg) { openLeaguePanel('No existe ninguna liga con el código ' + code + '.'); return; }
-    prof.leagues.push({ code, name: lg.name }); lgSel = prof.leagues.length - 1; saveProf();
-    await lgSyncAll(code); openLeaguePanel('✓ Te uniste a «' + lg.name + '»'); lgRefresh();
+    const lname = String(lg.name || '').slice(0, 24);
+    prof.leagues.push({ code, name: lname }); lgSel = prof.leagues.length - 1; saveProf();
+    await lgSyncAll(code); openLeaguePanel('✓ Te uniste a «' + esc(lname) + '»'); lgRefresh();
   } catch(e) { openLeaguePanel(lgErr(e)); }
 }
 async function lgRefresh() {
@@ -5788,7 +5898,7 @@ function replayTick(dt) {
   const r = RP.rp; if (!r) return;
   const slow = Math.abs(r.t - r.fin) < 0.9 ? 0.3 : 1;          // cámara lenta al cruzar la meta
   r.t += dt*slow; r.shotT += dt*slow;
-  if (r.t >= r.t1) { if (!r.end) { r.end = true; endReplay(); } return; }
+  if (r.t >= r.t1) { r.hold = (r.hold || 0) + Math.min(0.05, lastDt || 0.016); if (r.hold > 1.7 && !r.end) { r.end = true; endReplay(); } return; }   // placa final
   if (r.shotT > (r.shot === 1 ? 2.2 : 2.8) && Math.abs(r.t - r.fin) > 0.9) rpNextShot();
   rpApply(r.t);
   for (let i = parts.length - 1; i >= 0; i--) { const p = parts[i]; p.life -= dt; if (p.life <= 0) { parts.splice(i, 1); continue; } p.x += p.vx*dt; p.y += p.vy*dt; p.vx *= 0.94; p.vy *= 0.94; if (p.grow) p.size += dt*14; }
@@ -5811,6 +5921,17 @@ function drawReplayHUD() {
   txt('DRIFT LOOP', W/2, H - bh/2 + 6, 16, '#e1251b', 'center', false, 'italic 800');
   if (RP.rec && RP.rec.state === 'recording') { ctx.fillStyle = '#ff3b2a'; ctx.beginPath(); ctx.arc(W - 24, bh/2, 6, 0, 7); ctx.fill(); txt('GRABANDO', W - 36, bh/2 + 5, 13, '#fff', 'right', false, '800'); }
   else txt('TOCÁ PARA SALIR', W - 14, bh/2 + 5, 12, '#9aa3ad', 'right', false, '700');
+  if (r.hold) {   // placa final con el resultado (queda grabada en el clip)
+    const a = Math.min(1, r.hold/0.3), win = player.pos === 1, ts = Math.min(84, W*0.2), y0 = H*0.34;
+    ctx.fillStyle = `rgba(4,5,9,${(0.84*a).toFixed(3)})`; ctx.fillRect(0, bh, W, H - bh*2);
+    ctx.save(); ctx.globalAlpha = a;
+    txt('DRIFT', W/2 - ts*0.08, y0, ts, '#fff', 'center', false, 'italic 800'); txt('LOOP', W/2 + ts*0.12, y0 + ts*0.82, ts, '#e1251b', 'center', false, 'italic 800');
+    txt(win ? '¡GANASTE!' : player.pos + '° PUESTO', W/2, y0 + ts*0.82 + 56, 32, win ? '#ffd23f' : '#fff', 'center', true, 'italic 800');
+    txt(fmtTime(player.finishTime || 0) + ' · ' + TRK.name, W/2, y0 + ts*0.82 + 82, 17, '#c9d1d9', 'center', false, '700');
+    txt('JUGALO GRATIS', W/2, y0 + ts*0.82 + 128, 21, '#3dff8a', 'center', false, 'italic 800');
+    txt('zkizofrenhico.github.io/driftloop', W/2, y0 + ts*0.82 + 150, 15, '#fff', 'center', false, '700');
+    ctx.restore();
+  }
 }
 // ---- clip de video (MediaRecorder sobre el canvas) ----
 function rpMime() {
@@ -5819,10 +5940,16 @@ function rpMime() {
   return '';
 }
 function rpStartClip() {
-  const mime = rpMime();
-  if (!mime || !cv.captureStream) { popup('Tu navegador no puede grabar video', '#ff8a7a', true); return; }
+  if (typeof MediaRecorder === 'undefined' || !cv.captureStream) { popup('Tu navegador no puede grabar video', '#ff8a7a', true); return; }
   try {
-    const stream = cv.captureStream(30);
+    const stream = cv.captureStream(30); let audio = false;
+    // el clip sale con el sonido del juego (motor y música)
+    try { if (AU.ok && AU.ac.createMediaStreamDestination) { RP.aDest = RP.aDest || AU.ac.createMediaStreamDestination(); AU.out.connect(RP.aDest); for (const t of RP.aDest.stream.getAudioTracks()) { stream.addTrack(t); audio = true; } } } catch(e) {}
+    const sup = m => !!(MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m));
+    const withA = audio ? ['video/mp4;codecs=avc1,mp4a.40.2', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus'].find(sup) : '';
+    if (audio && !withA) for (const t of stream.getAudioTracks()) stream.removeTrack(t);
+    const mime = withA || rpMime();
+    if (!mime) { popup('Tu navegador no puede grabar video', '#ff8a7a', true); return; }
     RP.chunks = []; RP.recMime = mime;
     RP.rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 5000000 });
     RP.rec.ondataavailable = e => { if (e.data && e.data.size) RP.chunks.push(e.data); };
@@ -5834,6 +5961,7 @@ let rpClip = null;
 function rpClipReady() {
   const type = RP.recMime.split(';')[0], ext = type === 'video/mp4' ? 'mp4' : 'webm';
   const blob = new Blob(RP.chunks, { type }); RP.rec = null; RP.chunks = [];
+  try { if (RP.aDest) AU.out.disconnect(RP.aDest); } catch(e) {}
   if (blob.size < 2000) return;
   rpClip = { blob, file: new File([blob], `driftloop-${TRACK_KEY}.${ext}`, { type }), url: URL.createObjectURL(blob) };
   openClipPanel();
@@ -5976,8 +6104,11 @@ function showStreak(r) {
     <p>${r.lost ? 'Se cortó tu racha de ' + r.lost + ' días. ¡Arrancás de nuevo!' : r.n === 1 ? 'Entrá todos los días para que la racha crezca y pague más.' : 'Volvé mañana para seguir sumando.'}</p>
     <div class="sdays">${days}</div>
     <div style="font-size:40px;font-weight:800;font-style:italic;color:#3dff8a;margin:6px 0">+${fmtMoney(r.pay)}</div>
-    <div class="row"><button class="go" data-b="ok">COBRAR</button></div></div>`;
+    <div class="row">${r.lost && adsReady() ? '<button data-b="ad">🎬 RECUPERAR RACHA</button>' : ''}<button class="go" data-b="ok">COBRAR</button></div></div>`;
   bkEl.style.display = 'flex'; sfxBoost(0.5);
+  const adB = bkEl.querySelector('[data-b=ad]');
+  if (adB) adB.onclick = async () => { adB.disabled = true; if (!(await adsShow())) { adB.disabled = false; return; }
+    const n = r.lost + 1, pay = STREAK_PAY(n); prof.money += Math.max(0, pay - r.pay); prof.streak.n = n; prof.streak.best = Math.max(prof.streak.best || 0, n); saveProf(); showStreak({ n, pay, lost: 0 }); };
   bkEl.querySelector('[data-b=ok]').onclick = () => { bkEl.style.display = 'none'; sfxBlip(1200, 0.08); if (menuShown) mRender(false); };
 }
 // ---- evento semanal ----
@@ -6423,7 +6554,7 @@ function cloudAsk(c) {
   const ago = m => { const s = Math.max(0, (Date.now() - m)/1000); return s < 90 ? 'recién' : s < 5400 ? 'hace ' + Math.round(s/60) + ' min' : s < 129600 ? 'hace ' + Math.round(s/3600) + ' h' : 'hace ' + Math.round(s/86400) + ' días'; };
   bkEl.innerHTML = `<div class="box" style="text-align:center"><h3>☁ ¿QUÉ PARTIDA USAMOS?</h3>
     <p>Hay una partida guardada en tu cuenta de Google distinta a la de este ${NATIVE ? 'celular' : 'navegador'}.</p>
-    <div class="cldc"><button data-b="cloud"><b>☁ LA DE LA NUBE</b><span>Nivel ${c.lvl} · ${fmtMoney(c.money)}</span><small>guardada ${ago(c.at)} desde ${c.dev === 'app' ? 'la app' : 'la página'}</small></button>
+    <div class="cldc"><button data-b="cloud"><b>☁ LA DE LA NUBE</b><span>Nivel ${+c.lvl || 1} · ${fmtMoney(+c.money || 0)}</span><small>guardada ${ago(c.at)} desde ${c.dev === 'app' ? 'la app' : 'la página'}</small></button>
     <button data-b="local"><b>📱 LA DE ACÁ</b><span>Nivel ${prof.lvl || 1} · ${fmtMoney(Math.round(prof.money || 0))}</span><small>reemplaza la de la nube</small></button></div></div>`;
   bkEl.style.display = 'flex';
   bkEl.querySelectorAll('[data-b]').forEach(b => b.onclick = () => { bkEl.style.display = 'none'; if (b.dataset.b === 'cloud') cloudUse(c); else cloudPush(); });
@@ -6471,7 +6602,7 @@ setTimeout(() => { if (cloudOn()) cloudPull(false); }, 2500);
 function openCloud() {
   if (!cloudOn()) { googleLogin(); return; }
   const ago = CLOUD.last ? Math.round((Date.now() - CLOUD.last)/60000) : -1;
-  bkEl.innerHTML = `<div class="box" style="text-align:center"><h3>☁ NUBE</h3><p>Conectado como:<br><b>${fbAuth.email || fbAuth.gname || 'Google'}</b><br>Tu partida se guarda sola después de cada carrera.</p>
+  bkEl.innerHTML = `<div class="box" style="text-align:center"><h3>☁ NUBE</h3><p>Conectado como:<br><b>${esc(fbAuth.email || fbAuth.gname || 'Google')}</b><br>Tu partida se guarda sola después de cada carrera.</p>
     <div class="msg" style="color:${CLOUD.err ? '#ff8a7a' : '#3dff8a'}">${CLOUD.err || (ago < 0 ? 'Todavía no se guardó' : ago < 1 ? '✓ Guardado recién' : '✓ Guardado hace ' + ago + ' min')}</div>
     <div class="row"><button data-b="out">CERRAR SESIÓN</button><button class="go" data-b="now">GUARDAR AHORA</button></div><div class="row"><button data-b="close">CERRAR</button></div></div>`;
   bkEl.style.display = 'flex';
@@ -6640,7 +6771,8 @@ spEl.innerHTML = '<div class="lg"><b>DRIFT</b><b class="r">LOOP</b></div><div cl
 const skEl = document.createElement('div'); skEl.id = 'introSkip'; skEl.innerHTML = '<span>SALTEAR ▶▶</span>';
 (function () { const st = document.createElement('style'); st.textContent = ICSS; document.head.appendChild(st); document.body.appendChild(spEl); document.body.appendChild(skEl);
   for (const e of [spEl, skEl]) ['pointerdown', 'touchstart'].forEach(ev => e.addEventListener(ev, x => x.stopPropagation(), { passive: true }));
-  spEl.addEventListener('click', () => { initAudio(); introMark(); if (SET.intro !== false) startIntro(); else { spEl.style.display = 'none'; introPhase = null; } });
+  spEl.addEventListener('click', () => { initAudio(); introMark(); if (!prof.tut) { spEl.style.display = 'none'; introPhase = null; startTutorial(); }   // la primera vez: directo a manejar
+    else if (SET.intro !== false) startIntro(); else { spEl.style.display = 'none'; introPhase = null; } });
   skEl.addEventListener('click', () => { if (introPhase === 'play' && introT > 0.6) endIntro(true); });
 })();
 function placeOv(e) { e.style.left = Math.round((innerWidth - W)/2) + 'px'; e.style.width = W + 'px'; }
@@ -6732,7 +6864,7 @@ function drawIntro() {
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.globalAlpha = k*(1 - out)*ease((t - 16.6)/0.5); ctx.textAlign = 'center';
     ctx.font = `700 15px ${F}`; ctx.fillStyle = '#c9d1d9'; ctx.fillText('C A R R E R A S   O N E - T O U C H', W/2, H*0.42 + 140*Math.min(1, W/380));
     ctx.font = `italic 800 26px ${F}`; ctx.fillStyle = '#ffd23f'; ctx.globalAlpha = k*(1 - out)*ease((t - 17.1)/0.5);
-    ctx.fillText('4 COPAS · 16 CIRCUITOS', W/2, H*0.42 + 185*Math.min(1, W/380));
+    ctx.fillText('8 COPAS · 36 CIRCUITOS', W/2, H*0.42 + 185*Math.min(1, W/380));
     ctx.restore();
   }
   if (t < 0.5) { ctx.fillStyle = `rgba(0,0,0,${1 - t/0.5})`; ctx.fillRect(0, 0, W, H); }
@@ -6758,6 +6890,7 @@ function frame(now) {
   const raw = Math.max(0, (now - last)/1000); let dt = Math.min(ECO ? 0.05 : 0.033, raw); last = Math.max(last, now);
   if (tut && !paused) dt *= tutTick(dt);
   if (slowT > 0 && !paused) { slowT -= raw; dt *= 0.32; }   // cámara lenta al cruzar la meta
+  if (hitStop > 0 && !paused) { hitStop -= raw; dt *= 0.04; }   // micro-pausa en un choque fuerte
   try { if (introPhase) introTick(dt); if (!paused) { update(dt); if (ttMode) ttTick(); } render(); try { musicTick(); } catch(e) {} }
   catch (e) { errCount++; lastErr = String(e && e.message || e); lastErrT = performance.now(); if (errCount < 5) console.error(e); try { ctx.restore(); ctx.restore(); } catch(_) {} }
   syncMenu(dt); syncRes(dt);

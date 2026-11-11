@@ -1,10 +1,12 @@
 # Arma la app de Android en los servidores de GitHub y la publica para descargarla desde el celular:
 # https://github.com/zkizofrenhico/driftloop/releases/download/app/DriftLoop.apk
+# Las ramas prueba/** arman un instalador aparte, sin tocar el de arriba:
+# https://github.com/zkizofrenhico/driftloop/releases/download/app-prueba/DriftLoop-prueba.apk
 name: App Android
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'prueba/**']
     paths: ['index.html', 'app/**', '.github/workflows/android.yml']
   workflow_dispatch:
 
@@ -12,7 +14,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: android
+  group: android-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -52,6 +54,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete app --yes --cleanup-tag || true
-          gh release create app DriftLoop.apk --prerelease --title "Drift Loop — app de Android" \
-            --notes "Instalador de prueba armado automáticamente con la última versión del juego ($(date -u +'%d/%m/%Y %H:%M') UTC). Abrilo desde el celular y aceptá instalar apps desconocidas."
+          if [ "$GITHUB_REF_NAME" = "main" ]; then
+            gh release delete app --yes --cleanup-tag || true
+            gh release create app DriftLoop.apk --prerelease --target "$GITHUB_SHA" --title "Drift Loop — app de Android" \
+              --notes "Instalador de prueba armado automáticamente con la última versión del juego ($(date -u +'%d/%m/%Y %H:%M') UTC). Abrilo desde el celular y aceptá instalar apps desconocidas."
+          else
+            cp DriftLoop.apk DriftLoop-prueba.apk
+            gh release delete app-prueba --yes --cleanup-tag || true
+            gh release create app-prueba DriftLoop-prueba.apk --prerelease --target "$GITHUB_SHA" --title "Drift Loop — PRUEBA ($GITHUB_REF_NAME)" \
+              --notes "Instalador de la rama $GITHUB_REF_NAME ($(date -u +'%d/%m/%Y %H:%M') UTC). Se instala encima de la app actual y conserva la partida. Trae anuncios de PRUEBA de Google."
+          fi

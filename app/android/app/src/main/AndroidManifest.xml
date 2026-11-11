@@ -33,6 +33,11 @@
 
         </activity>
 
+        <!-- AdMob: ID de la app (se cambia en res/values/strings.xml) -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="@string/admob_app_id" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
