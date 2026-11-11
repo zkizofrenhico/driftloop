@@ -597,9 +597,16 @@ function worldPos(s, d, o) { sample(s, o); o.wx = o.x - o.ty*d; o.wy = o.y + o.t
    ===================================================================== */
 const cv = document.getElementById('c'), ctx = cv.getContext('2d');
 let W = 0, H = 0, DPR = 1, QUAL = 0;
-const MAXQ = (function () { try { const p = JSON.parse(localStorage.getItem('driftloop_profile')); if (p && p.set && p.set.quality) return p.set.quality === 'maxima'; } catch(e) {} return C.calidad === 'maxima'; })();
-const ECO = (function () { try { const p = JSON.parse(localStorage.getItem('driftloop_profile')); return !!(p && p.set && p.set.quality === 'ahorro'); } catch(e) { return false; } })();
-const QCAP = MAXQ ? [3, 2, 1.5] : ECO ? [1.25, 1, 1] : [2, 1.5, 1];   // límite de resolución por nivel de calidad   // límite de resolución por nivel de calidad
+function qualSave() { try { localStorage.setItem('driftloop_ql', QUAL + '|' + Date.now()); } catch(e) {} }
+// Calidad: 'auto' (por defecto) mira el equipo y se va ajustando sola · 'maxima' y 'ahorro' solo si el jugador las elige
+const QSET = (function () { try { const p = JSON.parse(localStorage.getItem('driftloop_profile')); if (p && p.set && p.set.qv === 2 && p.set.quality) return p.set.quality; } catch(e) {} return 'auto'; })();
+const DEV_HI = (navigator.deviceMemory || 4) >= 8 && (navigator.hardwareConcurrency || 4) >= 8;      // gama alta
+const DEV_LO = (navigator.deviceMemory || 4) <= 3 || (navigator.hardwareConcurrency || 4) <= 4;      // gama baja
+const AUTOQ = QSET === 'auto';
+const MAXQ = QSET === 'maxima' || (AUTOQ && DEV_HI);
+const ECO = QSET === 'ahorro';
+let LOCK30 = false;                                       // último recurso: 30 cuadros parejos en vez de ir a los saltos
+const QCAP = MAXQ ? [3, 2, 1.5, 1] : ECO ? [1.25, 1, 1, 0.75] : [2, 1.5, 1, 0.75];   // límite de resolución por nivel de calidad
 function resize() {
   const vw = innerWidth, vh = innerHeight;
   W = vw > vh ? Math.round(vh*0.6) : vw; H = vh;   // en escritorio simula un celular vertical
@@ -607,6 +614,12 @@ function resize() {
   cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
   cv.style.width = W+'px'; cv.style.height = H+'px';
 }
+// nivel con el que arranca: el que quedó guardado (una vez por día prueba uno mejor) o, la primera vez, según el equipo
+if (AUTOQ) (function () { try {
+  const pp = String(localStorage.getItem('driftloop_ql') || '').split('|'), q = +pp[0], at = +pp[1] || 0;
+  if (pp[0] !== '' && q >= 0 && q <= 3) { QUAL = q; if (q > 0 && Date.now() - at > 86400000) { QUAL = q - 1; qualSave(); } }
+  else QUAL = DEV_LO ? 1 : 0;
+} catch(e) {} })();
 addEventListener('resize', resize); resize();
 
 const FONT = '"Barlow Condensed", "Arial Narrow", sans-serif';
@@ -634,9 +647,9 @@ const SUN = { x: 0.78, y: 1.04 };            // dirección de las sombras en el 
    FXL 3 = brillo (bloom), reflejo en la carrocería, gotas en la cámara · 2 = partículas de ambiente · 1 = base
    ===================================================================== */
 var FXL = (function () {
-  try { const q = (JSON.parse(localStorage.getItem('driftloop_profile')) || {}).set || {}; if (q.quality === 'ahorro') return 1;
+  try { const q = (JSON.parse(localStorage.getItem('driftloop_profile')) || {}).set || {}; if (q.qv === 2 && q.quality === 'ahorro') return 1;
         const pp = String(localStorage.getItem('driftloop_fxl') || '').split('|'), cap = +pp[0], at = +pp[1] || 0;
-        if (!(cap >= 1 && cap <= 3)) return 3;
+        if (!(cap >= 1 && cap <= 3)) return ((navigator.deviceMemory || 4) <= 3 || (navigator.hardwareConcurrency || 4) <= 4) ? 2 : 3;
         if (cap < 3 && Date.now() - at > 3*86400000) { localStorage.setItem('driftloop_fxl', (cap + 1) + '|' + Date.now()); return cap + 1; }   // cada 3 días prueba un escalón más
         return cap; } catch(e) { return 3; }
 })();
@@ -1423,7 +1436,7 @@ const decor = { boards: [], paints: [], tents: [], fans: [], posts: [], cars: []
 })();
 /* --------- Horneado de tiles --------- */
 const TS = 512, TM = 2;                       // tamaño de tile en el mundo y margen anti-costuras
-let TSC = MAXQ ? 2 : 1.25;                               // resolución de los tiles (px por unidad de mundo)
+let TSC = QUAL >= 3 ? 0.8 : QUAL >= 2 ? (MAXQ ? 1.25 : 0.9) : MAXQ ? 2 : 1.25;                               // resolución de los tiles (px por unidad de mundo)
 const tiles = new Map(), queued = new Set(); let bakeQueue = [], frameNo = 0;
 const MAX_TILES = MAXQ ? 44 : 34, tilePool = [];
 let tilesBroken = false;
@@ -2517,7 +2530,7 @@ function addSkid(x1, y1, x2, y2, type) {
   skHead = (skHead+1) % SK_MAX; if (skN < SK_MAX) skN++;
 }
 function part(x, y, vx, vy, life, size, col, grow) {
-  if (parts.length > (MAXQ ? 900 : 360)) parts.shift();
+  if (parts.length > (QUAL >= 2 ? 180 : MAXQ ? 900 : 360)) parts.shift();
   parts.push({ x, y, vx, vy, life, max: life, size, col, grow, k: partN++ % 3 });
 }
 function popup(txt, col, big) { popups.push({ txt, col, big: !!big, t: 0 }); if (popups.length > 4) popups.shift(); if (sayOK()) try { sayPopup(txt); } catch(e) {} }
@@ -3081,7 +3094,7 @@ function update(dt) {
   const held = isHeld(), held2 = duoMode && isHeld2();
   updateDynWeather(dt);
   if (WX.wet) {
-    const nS = Math.round((MAXQ ? 18 : 10)*WX.rainK);
+    const nS = Math.round((QUAL >= 2 ? 5 : MAXQ ? 18 : 10)*WX.rainK);
     for (let i = 0; i < nS; i++) { const a = Math.random()*6.283, r = Math.sqrt(Math.random())*700; splashes.push({ x: cam.x + Math.cos(a)*r, y: cam.y + Math.sin(a)*r, t: 0 }); }
     let j = 0; for (let i = 0; i < splashes.length; i++) { const s = splashes[i]; s.t += dt; if (s.t < 0.3) splashes[j++] = s; } splashes.length = Math.min(j, 600);
   } else if (splashes.length) splashes.length = 0;
@@ -3432,7 +3445,7 @@ function drawWeatherOverlay() {
   }
   if (WX.skyK > 0 && !WX.night) { ctx.fillStyle = `rgba(30,40,58,${(0.26*WX.skyK).toFixed(3)})`; ctx.fillRect(0, 0, W, H); }
   if (WX.wet) {
-    const n = Math.round((MAXQ ? 240 : 140)*WX.rainK);
+    const n = Math.round((QUAL >= 2 ? 70 : MAXQ ? 240 : 140)*WX.rainK);
     if (rainDrops.length > n) rainDrops.length = n;
     while (rainDrops.length < n) rainDrops.push({ x: Math.random()*W, y: Math.random()*H, l: rand(14, 30), s: rand(900, 1400) });
     const dx = 0.22, dt = Math.min(0.05, lastDt || 0.016);
@@ -4206,7 +4219,8 @@ function gPreviewLoop(now) {
 /* =====================================================================
    PAUSA Y OPCIONES
    ===================================================================== */
-const SET = prof.set = Object.assign({ vol: 0.9, eng: 1, fx: 1, vib: true, drone: true, names: true, warn: true, laps: 3, rivals: 5, diff: 'normal', quality: 'maxima', lang: 'auto', music: 0.55, voice: true, vgen: 'f', intro: true, damage: true, mode: 'carrera' }, prof.set || {});
+const SET = prof.set = Object.assign({ vol: 0.9, eng: 1, fx: 1, vib: true, drone: true, names: true, warn: true, laps: 3, rivals: 5, diff: 'normal', quality: 'auto', lang: 'auto', music: 0.55, voice: true, vgen: 'f', intro: true, damage: true, mode: 'carrera' }, prof.set || {});
+if (SET.qv !== 2) { SET.quality = 'auto'; SET.qv = 2; }   // antes todos arrancaban en Máxima: ahora es automática salvo que la elijas
 const DIFFS = { facil: ['Fácil', 0.93], normal: ['Normal', 1.0], dificil: ['Difícil', 1.06] };
 function applySettings() {
   C.movimientoDrone = SET.drone ? 1 : 0;
@@ -4305,7 +4319,7 @@ function pRender() {
   row('#pRace', 'Rivales', '', seg('rivals', [[3, '3'], [5, '5'], [7, '7']], applySettings));
   row('#pRace', 'Dificultad', '', seg('diff', Object.entries(DIFFS).map(([k, v]) => [k, v[0]]), applySettings));
   if (!inRace) row('#pGame', 'Idioma', '🌐', seg('lang', [['auto', 'Auto'], ['es', 'Español'], ['en', 'English']], () => { saveProf(); location.reload(); }));
-  row('#pGfx', 'Calidad', 'Se aplica al volver a abrir el juego. Ahorro = menos batería', seg('quality', [['maxima', 'Máxima'], ['auto', 'Auto'], ['ahorro', 'Ahorro']], () => { try { localStorage.removeItem('driftloop_fxl'); } catch(e) {} }));
+  row('#pGfx', 'Calidad', 'Se aplica al volver a abrir el juego. Ahorro = menos batería', seg('quality', [['maxima', 'Máxima'], ['auto', 'Auto'], ['ahorro', 'Ahorro']], () => { try { localStorage.removeItem('driftloop_fxl'); localStorage.removeItem('driftloop_ql'); } catch(e) {} }));
   if (inRace) { const n = document.createElement('div'); n.className = 'note'; n.textContent = 'Los cambios de "Próxima carrera" se aplican al reiniciar o en la siguiente carrera.'; q('#pRace').appendChild(n); }
 }
 addEventListener('resize', () => { if (paused) { pEl.style.left = Math.round((innerWidth - W)/2) + 'px'; pEl.style.width = W + 'px'; } });
@@ -7142,10 +7156,10 @@ function showErr() {
 }
 let ecoLast = 0;
 function frame(now) {
-  if (now - ecoLast < (ECO ? 30 : 10)) { requestAnimationFrame(frame); return; }   // ahorro: 30 cuadros por segundo; pantallas de 120 Hz: tope de 60
+  if (now - ecoLast < (ECO || LOCK30 ? 30 : 10)) { requestAnimationFrame(frame); return; }   // ahorro: 30 cuadros por segundo; pantallas de 120 Hz: tope de 60
   if (ADS.busy) { last = now; requestAnimationFrame(frame); return; }   // con el anuncio en pantalla el juego no dibuja nada
   ecoLast = now;
-  const raw = Math.max(0, (now - last)/1000); let dt = Math.min(ECO ? 0.05 : 0.033, raw); last = Math.max(last, now);
+  const raw = Math.max(0, (now - last)/1000); let dt = Math.min(ECO || LOCK30 ? 0.05 : 0.033, raw); last = Math.max(last, now);
   if (tut && !paused) dt *= tutTick(dt);
   if (slowT > 0 && !paused) { slowT -= raw; dt *= 0.32; }   // cámara lenta al cruzar la meta
   if (hitStop > 0 && !paused) { hitStop -= raw; dt *= 0.04; }   // micro-pausa en un choque fuerte
@@ -7153,14 +7167,17 @@ function frame(now) {
   catch (e) { errCount++; lastErr = String(e && e.message || e); lastErrT = performance.now(); if (errCount < 5) console.error(e); try { ctx.restore(); ctx.restore(); } catch(_) {} }
   syncMenu(dt); syncRes(dt);
   showErr();
-  // calidad automática: si el promedio de 1,5 s pasa de 26 ms por cuadro, baja resolución/detalle
+  // calidad automática: mide de a 1 segundo; si no llega a 60 parejos, primero apaga efectos y después baja resolución y detalle
   perfT += raw;
-  if (perfT > 1 && bakeQueue.length < 3) {
+  if (perfT > 1 && bakeQueue.length < 3 && raw < 0.25 && !paused) {
     perfAcc += raw; perfN++;
-    if (perfAcc > 1.5) {
-      const avg = perfAcc/perfN;
-      if (avg > 0.022 && fxDown()) { /* primero se apagan efectos */ }
-      else if (avg > (MAXQ ? 0.045 : 0.026) && QUAL < 2) { QUAL = avg > 0.06 ? 2 : QUAL + 1; resize(); postCanvas = null; if (QUAL === 2 && TSC > (MAXQ ? 1.25 : 0.9)) { TSC = MAXQ ? 1.25 : 0.9; clearTiles(); } }
+    if (perfAcc > 1) {
+      const avg = perfAcc/perfN - (ECO ? 0.0167 : 0), strict = QSET !== 'maxima', bad = avg > 0.033;   // en Ahorro (30 cuadros) se descuenta la espera propia
+      const qDown = n => { QUAL = Math.min(3, QUAL + n); if (AUTOQ) qualSave(); resize(); postCanvas = null; const t = QUAL >= 3 ? 0.8 : MAXQ ? 1.25 : 0.9; if (QUAL >= 2 && TSC > t) { TSC = t; clearTiles(); } };
+      if (LOCK30) { /* ya está en lo mínimo */ }
+      else if (bad && strict) { while (fxDown()) {} if (QUAL < 3) qDown(avg > 0.05 ? 2 : 1); else LOCK30 = true; }   // va a los tirones: baja todo de una
+      else if (avg > (strict ? 0.019 : 0.022) && fxDown()) { /* primero se apagan efectos */ }
+      else if (avg > (strict ? 0.0205 : 0.045) && QUAL < (strict ? 3 : 2)) qDown(1);
       perfAcc = 0; perfN = 0;
     }
   }
