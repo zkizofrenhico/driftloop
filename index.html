@@ -200,6 +200,11 @@ const I18N_EN = {
   'Si entrás pasado, la cola se va': 'Enter too fast and the rear steps out', 'Soltá: freno motor': 'Let go: engine braking', 'R: marcha atrás': 'R: reverse',
   'Tocá para cambiar': 'Tap to change', '◀ MANTENÉ R': '◀ HOLD R', '¡EMPIEZA A NEVAR!': 'IT STARTS SNOWING!', 'VICTORIAS': 'WINS', 'CARRERA': 'RACE', 'CARRERAS': 'RACES', 'QUEDAN': 'LEFT', 'VISTA PREVIA': 'PREVIEW', 'Arrastrá para girar el auto': 'Drag to spin the car', 'COPAS': 'CUPS', 'VUELTA': 'LAP', 'VUELTAS': 'LAPS',
   'en pista': 'on track', 'CIRCUITO DEL DÍA': 'DAILY TRACK', '⚠ MOTOR TOCADO': '⚠ ENGINE DAMAGED', 'Español': 'Español', 'English': 'English',
+  '🗑 BORRAR MI CUENTA Y DATOS ONLINE': '🗑 DELETE MY ACCOUNT AND ONLINE DATA', '🗑 BORRAR MI CUENTA': '🗑 DELETE MY ACCOUNT', 'CANCELAR': 'CANCEL', 'BORRAR TODO': 'DELETE EVERYTHING', 'Borrando…': 'Deleting…',
+  'Se borran tu partida guardada en la nube, tus tiempos y fantasmas en las ligas y tu cuenta online. Tu partida en este celular no se toca. No se puede deshacer.': 'This deletes your cloud save, your times and ghosts in leagues, and your online account. The game on this phone is not touched. It cannot be undone.',
+  '✓ Listo: tu cuenta y tus datos online se borraron.': '✓ Done: your account and online data were deleted.',
+  'Tus datos online se borraron. Para borrar también la cuenta vacía, escribí al contacto de la política de privacidad.': 'Your online data was deleted. To also remove the empty account, write to the contact in the privacy policy.',
+  'No se pudo borrar. Revisá la conexión y probá de nuevo.': 'Could not delete. Check your connection and try again.',
   'SIGUIENTE ▶': 'NEXT ▶', 'CARGANDO CIRCUITO…': 'LOADING TRACK…', '☁ SE VIENE LA NIEVE…': '☁ SNOW IS COMING…', 'Del día ×2': 'Daily ×2', 'En curso': 'In progress', 'SIGUE': 'NEXT',
   'Subí al podio para ganar el trofeo.': 'Finish on the podium to win the trophy.',
   'PRÓXIMA META': 'NEXT GOAL', 'DUPLICAR PREMIO': 'DOUBLE PRIZE', 'PREMIO DUPLICADO': 'PRIZE DOUBLED', 'RECUPERAR RACHA': 'RESTORE STREAK', 'JUGALO GRATIS': 'PLAY IT FREE'
@@ -4268,7 +4273,8 @@ function pRender() {
     btn('↻ REINICIAR CARRERA', '', () => { closePause(); if (elimMode) startElim(); else if (duoMode) startDuo(); else if (driftMode) startDrift(); else { resetRace(); startCountdown(); } });
     btn('SALIR AL MENÚ', '', () => { closePause(); if (tut) endTutorial(true); endChampRace(); endTT(); endElim(); endDuo(); endDrift(); endEvent(); resetRace(); state = 'menu'; stateT = 0; });
   } else { btn('✓ LISTO', 'go', () => closePause()); btn('▶ VER LA INTRO', '', () => { closePause(); startIntro(); }); btn('👆 REPETIR EL TUTORIAL', '', () => { closePause(); startTutorial(); });
-    btn(cloudOn() ? '☁ NUBE · ' + (fbAuth.email || 'GOOGLE') : '☁ GUARDAR EN LA NUBE (GOOGLE)', cloudOn() ? '' : 'go', () => openCloud()); btn('📤 COPIAR CÓDIGO DE RESPALDO', '', () => openBackup('export')); btn('📥 RESTAURAR PARTIDA', '', () => openBackup('import')); }
+    btn(cloudOn() ? '☁ NUBE · ' + (fbAuth.email || 'GOOGLE') : '☁ GUARDAR EN LA NUBE (GOOGLE)', cloudOn() ? '' : 'go', () => openCloud()); btn('📤 COPIAR CÓDIGO DE RESPALDO', '', () => openBackup('export')); btn('📥 RESTAURAR PARTIDA', '', () => openBackup('import'));
+    if (fbAuth && fbAuth.uid) btn('🗑 BORRAR MI CUENTA Y DATOS ONLINE', '', () => openDeleteAccount()); }
 
   const row = (parent, label, sub, ctrl) => { const r = document.createElement('div'); r.className = 'row'; r.innerHTML = `<div>${label}${sub ? `<small>${sub}</small>` : ''}</div>`; r.appendChild(ctrl); q(parent).appendChild(r); };
   const slider = (key, onch) => { const s = document.createElement('input'); s.type = 'range'; s.min = 0; s.max = 100; s.value = Math.round(SET[key]*100); s.oninput = () => { SET[key] = s.value/100; onch && onch(); audioVolumes(); }; s.onchange = () => saveProf(); return s; };
@@ -6812,6 +6818,38 @@ function openCloud() {
     else if (a === 'out') { bkEl.style.display = 'none'; googleLogout(); }
     else { msg.style.color = '#ffd23f'; msg.textContent = 'Guardando…'; await cloudPush(); msg.style.color = CLOUD.err ? '#ff8a7a' : '#3dff8a'; msg.textContent = CLOUD.err || '✓ Guardado recién'; }
   });
+}
+// ---- borrar la cuenta online y sus datos (Google Play lo exige a las apps que crean cuentas) ----
+// Borra: la partida en la nube, tus tiempos y fantasmas en cada liga, y la cuenta de Firebase. La partida del celular queda.
+async function deleteAccountData() {
+  if (!fbAuth || !fbAuth.uid) return true;
+  const tk = await fbToken(), uid = fbAuth.uid;
+  const del = path => fbFetch(FS_BASE + path, { method: 'DELETE', headers: { Authorization: 'Bearer ' + tk } })
+    .then(r => { if (!r.ok && r.status !== 404) { const e = new Error('del ' + r.status); e.status = r.status; throw e; } });
+  for (const L of prof.leagues || []) await Promise.all(TRACK_KEYS.map(k => del(`/leagues/${L.code}/times/${uid}_${k}`)));
+  await del(`/saves/${uid}`);
+  let gone = false;
+  try { const r = await fbFetch('https://identitytoolkit.googleapis.com/v1/accounts:delete?key=' + FB.key, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken: tk }) }); gone = r.ok; } catch(e) {}
+  clearTimeout(CLOUD.timer); fbAuth = null; fbSave(); prof.leagues = []; lgSel = 0; lgCache = {};
+  CLOUD.sync = { at: 0, localAt: 0 }; CLOUD.last = 0; cloudSyncSave(); saveProf();
+  return gone;   // false: los datos se borraron pero Firebase pidió un inicio de sesión reciente para borrar la cuenta vacía
+}
+function openDeleteAccount() {
+  bkEl.innerHTML = `<div class="box"><h3>🗑 BORRAR MI CUENTA</h3>
+    <p>Se borran tu partida guardada en la nube, tus tiempos y fantasmas en las ligas y tu cuenta online. Tu partida en este celular no se toca. No se puede deshacer.</p><div class="msg"></div>
+    <div class="row"><button data-b="close">CANCELAR</button><button class="go" data-b="del">BORRAR TODO</button></div></div>`;
+  bkEl.style.display = 'flex';
+  const msg = bkEl.querySelector('.msg');
+  bkEl.querySelector('[data-b=close]').onclick = () => { bkEl.style.display = 'none'; if (paused) pRender(); };
+  const b = bkEl.querySelector('[data-b=del]');
+  b.onclick = async () => {
+    b.disabled = true; msg.style.color = '#ffd23f'; msg.textContent = 'Borrando…';
+    try {
+      const gone = await deleteAccountData();
+      msg.style.color = '#3dff8a'; msg.textContent = gone ? '✓ Listo: tu cuenta y tus datos online se borraron.' : 'Tus datos online se borraron. Para borrar también la cuenta vacía, escribí al contacto de la política de privacidad.';
+      b.style.display = 'none'; bkEl.querySelector('[data-b=close]').textContent = 'CERRAR';
+    } catch(e) { b.disabled = false; msg.style.color = '#ff8a7a'; msg.textContent = 'No se pudo borrar. Revisá la conexión y probá de nuevo.'; }
+  };
 }
 function cloudRowHTML() {
   if (!cloudOn()) return '';
