@@ -754,6 +754,7 @@ function adsReady() { return ADS.ok && ADS.ready && !ADS.busy; }
 async function adsShow() {
   const A = NP('AdMob'); if (!A || !adsReady()) return false;
   ADS.busy = true; ADS.ready = false; let ok = false; const subs = [];
+  try { if (AU.ok) AU.ac.suspend(); } catch(e) {} try { speechSynthesis.cancel(); } catch(e) {}   // el anuncio va sin el sonido del juego
   try {
     ok = await new Promise(res => {
       let got = false;
@@ -2300,7 +2301,8 @@ function audioUpdate(dt, held) {
     ENG.load += (ld - ENG.load)*Math.min(1, dt*(ld ? 9 : 12));
   }
   ENG.rpm += (target - ENG.rpm)*Math.min(1, dt*(ENG.shiftT > 0 ? 28 : 12));
-  ENG.vol = done ? Math.max(0, (ENG.vol === undefined ? 0.75 : ENG.vol) - dt*0.5) : state === 'menu' ? 0.35 : 0.75;
+  const quiet = done || !(state === 'countdown' || state === 'race' || state === 'finish');   // resultados, repetición y menús: sin efectos
+  ENG.vol = quiet ? Math.max(0, (ENG.vol === undefined ? 0.75 : ENG.vol) - dt*0.8) : 0.75;
   AU.eng.set(ENG.rpm, ENG.load, ENG.vol, t);
 
   if (ENG.prevLoad > 0.6 && ENG.load < 0.3 && ENG.rpm > 4800) ENG.popT = 0.6;
@@ -2329,7 +2331,8 @@ function audioUpdate(dt, held) {
   AU.cbL.frequency.setTargetAtTime(Math.max(4, (p.v || 0)/26), t, 0.03);
   AU.cbG.gain.setTargetAtTime(cl*0.5, t, 0.02); AU.cbLg.gain.setTargetAtTime(cl*0.5, t, 0.02);
   AU.wnG.gain.setTargetAtTime(racing ? vr*vr*0.04 : 0, t, 0.2);
-  AU.rnG.gain.setTargetAtTime(0.09*WX.rainK, t, 0.3); AU.rdG.gain.setTargetAtTime(0.12*WX.rainK, t, 0.3);
+  const rk = quiet ? 0 : WX.rainK;
+  AU.rnG.gain.setTargetAtTime(0.09*rk, t, 0.3); AU.rdG.gain.setTargetAtTime(0.12*rk, t, 0.3);
 }
 
 function sfxPop() {
@@ -6491,6 +6494,8 @@ function musicTick() {
   if (!AU.ok || !AU.ac) return;
   if (!MUS.bus) { MUS.bus = AU.ac.createGain(); MUS.bus.gain.value = musVolume(); MUS.bus.connect(AU.out); }
   const want = musWanted();
+  const post = (state === 'finish' && stateT > 2.2) || replayOn, mv = musVolume()*(post ? 0.45 : 1);   // después de la carrera, música bajita
+  if (Math.abs(MUS.bus.gain.value - mv) > 0.004) MUS.bus.gain.setTargetAtTime(mv, AU.ac.currentTime, 0.4);
   if (MUS.kind === 'menu' && !MUS.gen.race) { MUS.gen.race = 1; setTimeout(() => { try { musBuffer('race'); } catch(e) {} }, 2500); }   // la de carrera se prepara mientras estás en el menú
   if (want === MUS.kind) return;
   // se genera de a una, sin trabar el cuadro en que se pide
@@ -6898,7 +6903,7 @@ setInterval(() => {
     else if (!want && wakeLock) { wakeLock.release(); wakeLock = null; }
   } catch(e) {}
 }, 1500);
-document.addEventListener('visibilitychange', () => { try { if (!AU.ok) return; if (document.hidden) AU.ac.suspend(); else AU.ac.resume(); } catch(e) {} });
+document.addEventListener('visibilitychange', () => { try { if (!AU.ok) return; if (document.hidden) AU.ac.suspend(); else if (!ADS.busy) AU.ac.resume(); } catch(e) {} });
 
 /* =====================================================================
    INTRO: pantalla "tocá para arrancar" + presentación en vivo con el motor del juego
