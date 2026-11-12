@@ -4626,7 +4626,7 @@ function mRender(anim) {
     <div class="tag${a(0.12)}"><i></i>CARRERAS ONE-TOUCH<i></i></div>
     <div class="hero${a(0.18)}"><canvas id="mHero"></canvas><div class="cname"><b>${m.name}</b>#${prof.num}</div></div>
     <div class="cards${a(0.26)}">
-      <div class="card"><div class="lab">CIRCUITO</div><div class="val">${TRK.name}</div><div class="sub">${TRACK_KEY === 'diaria' ? '<b style="color:#ffd23f">📅 HOY ×2</b>' : 'Récord ' + bestFor(TRACK_KEY)}</div>${TRACK_SVG[TRACK_KEY]}
+      <div class="card trk" data-a="tracks"><div class="lab">CIRCUITO <i class="all">▦ ${EN ? 'ALL' : 'TODOS'}</i></div><div class="val">${TRK.name}</div><div class="sub">${TRACK_KEY === 'diaria' ? '<b style="color:#ffd23f">📅 HOY ×2</b>' : 'Récord ' + bestFor(TRACK_KEY)}</div>${TRACK_SVG[TRACK_KEY]}
         <button class="arr l" data-a="t-">◀</button><button class="arr r" data-a="t+">▶</button></div>
       <div class="card"><div class="lab">CLIMA</div><div class="val">${WX.name}</div><div class="sub${WX.pay > 1 ? ' g' : ''}">${WX.pay > 1 ? 'Premio ×' + WX.pay : 'Premio normal'}</div><div class="wico">${WX.icon}\uFE0F</div>
         <button class="arr l" data-a="w-">◀</button><button class="arr r" data-a="w+">▶</button></div>
@@ -4641,8 +4641,8 @@ function mRender(anim) {
     <div class="row3${a(0.46)}"><button class="sec tt" data-a="tt">⏱ CONTRARRELOJ</button><button class="sec" data-a="gar">GARAJE</button><button class="sec ic" data-a="opt">⚙</button></div>
     ${reqMenuHTML(a(0.48))}
     ${prof.lvl >= 3 ? eventMenuHTML(a(0.5)) : `<div class="tip${a(0.5)}"><b>TIP</b><span id="mTip">${TIPS[tipI]}</span></div>`}`;
-  mEl.querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
-    const act = b.dataset.a;
+  mEl.querySelectorAll('[data-a]').forEach(b => b.onclick = ev => {
+    ev.stopPropagation(); const act = b.dataset.a;
     if (act === 'go') { sfxBlip(880, 0.08); endChampRace(); endTT(); endEvent(); mEl.style.display = 'none'; menuShown = false; if (!prof.tut) startTutorial(); else if (SET.mode === 'elim') startElim(); else if (SET.mode === 'duo') startDuo(); else if (SET.mode === 'drift') startDrift(); else { endElim(); endDuo(); endDrift(); resetRace(); startCountdown(); } }
     else if (act.indexOf('m-') === 0) { SET.mode = act.slice(2); saveProf(); sfxBlip(760, 0.05); mRender(false); }
     else if (act === 'req') { initAudio(); sfxBlip(880, 0.08); openReqPanel(); }
@@ -4653,6 +4653,7 @@ function mRender(anim) {
     else if (act === 'lvl') openLevelPanel();
     else if (act === 'gar') openGarage();
     else if (act === 'opt') openPause(true);
+    else if (act === 'tracks') { initAudio(); sfxBlip(880, 0.06); openTracksPanel(); }
     else if (act === 't-' || act === 't+') cycleTrackDir(act === 't+' ? 1 : -1);
     else if (act === 'w-' || act === 'w+') cycleWeatherDir(act === 'w+' ? 1 : -1);
   });
@@ -4898,7 +4899,8 @@ let CHAMP = CUPS[prof.champ ? prof.champ.cup : 'bronce'].races;
 function cupUnlocked(k) { const i = CUP_KEYS.indexOf(k); return i <= 0 || (prof.cups[CUP_KEYS[i - 1]] || 99) <= 3; }
 function trackCup(t) { return CUP_KEYS.find(k => CUPS[k].races.some(r => r.track === t)) || 'bronce'; }
 function trackUnlocked(t) { return cupUnlocked(trackCup(t)); }
-function freeTracks() { const l = (DAILY ? ['diaria'] : []).concat(['ocho']); for (const k of CUP_KEYS) if (cupUnlocked(k)) for (const r of CUPS[k].races) l.push(r.track); return l; }
+const SPECIAL_TRACKS = TRACK_KEYS.filter(k => k !== 'diaria' && k !== 'ocho' && !CUP_KEYS.some(c => CUPS[c].races.some(r => r.track === k)));
+function freeTracks() { const l = (DAILY ? ['diaria'] : []).concat(['ocho']); for (const k of CUP_KEYS) if (cupUnlocked(k)) for (const r of CUPS[k].races) if (l.indexOf(r.track) < 0) l.push(r.track); for (const k of SPECIAL_TRACKS) l.push(k); return l; }
 function wxLabel(w, t) { return (THEMES[TRACKS[t].theme] || {}).snow && WEATHERS[w].wet ? '🌨 ' + (w === 'tormenta' ? 'VENTISCA' : 'NEVADA') : (WEATHERS[w]._i || WEATHERS[w].icon) + '️ ' + (WEATHERS[w]._n || WEATHERS[w].name); }
 function cupColors(k) { return CUPS[k].col + ',' + CUPS[k].col2; }
 function trophySVG(k, size) {
@@ -5651,8 +5653,55 @@ const TCSS = `
 #menu .row3 .ic{flex:.5}
 `;
 (function () { const st = document.createElement('style'); st.textContent = TCSS; document.head.appendChild(st); })();
+
+/* =====================================================================
+   CIRCUITOS: todos a la vista para elegir de un toque (en vez de pasar de a uno)
+   ===================================================================== */
+const SPECIAL_TAG = k => { const T = TRACKS[k]; return T.rally ? '🌲 RALLY' : k === 'superovalo' ? '🚛 ' + LX('VELOZ', 'FAST') : k === 'granpremio' ? '🏎 GRAN PREMIO' : ''; };
+function trackGo(k) {
+  if (k === TRACK_KEY) { hidePanel(); return; }
+  try { localStorage.setItem('driftloop_track', k); } catch(e) {}
+  reloading = true; hidePanel(); mEl.style.display = 'none'; render();
+  setTimeout(() => { try { location.hash = k; } catch(e) {} location.reload(); }, 60);
+}
+function openTracksPanel() {
+  const tile = (k, lock, tag) => { const T = TRACKS[k], cur = k === TRACK_KEY;
+    return `<button class="tk${cur ? ' cur' : ''}${lock ? ' lock' : ''}" data-k="${k}"${lock ? ' data-lock="1"' : ''}>${TRACK_SVG[k]}
+      <b>${T.name}</b><span>${tag || THEME_NAME[T.theme] || ''}</span><span>${lock ? '🔒 ' + lock : cur ? '📍 ' + LX('ESTÁS ACÁ', 'YOU ARE HERE') : (k === 'diaria' ? '📅 ' + LX('PREMIO ×2', 'PRIZE ×2') : '⏱ ' + bestFor(k))}</span></button>`; };
+  let html = '';
+  if (DAILY) html += `<div class="sec">📅 ${LX('CIRCUITO DEL DÍA · CAMBIA MAÑANA', 'TRACK OF THE DAY · CHANGES TOMORROW')}</div><div class="tks">${tile('diaria')}${tile('ocho')}</div>`;
+  else html += `<div class="tks">${tile('ocho')}</div>`;
+  for (const c of CUP_KEYS) {
+    const open = cupUnlocked(c), ks = CUPS[c].races.map(r => r.track).filter((k, i, a) => a.indexOf(k) === i && k !== 'ocho');
+    const prev = CUP_KEYS[CUP_KEYS.indexOf(c) - 1];
+    html += `<div class="sec">${LX('COPA ', 'CUP ')}${CUPS[c].name}${open ? '' : ' · 🔒'}</div><div class="tks">${ks.map(k => tile(k, open ? '' : LX('Podio en ', 'Podium in ') + CUPS[prev].name)).join('')}</div>`;
+  }
+  if (SPECIAL_TRACKS.length) html += `<div class="sec">⭐ ${LX('ESPECIALES', 'SPECIAL')}</div><div class="tks">${SPECIAL_TRACKS.map(k => tile(k, '', SPECIAL_TAG(k))).join('')}</div>`;
+  const nOpen = freeTracks().length, nAll = TRACK_KEYS.length - (DAILY ? 0 : 1);
+  showPanel(`<div class="wrap"><h2>${LX('CIRCUI<span>TOS</span>', 'TRA<span>CKS</span>')}</h2><div class="sub">${LX('Tocá uno para correr ahí', 'Tap one to race there')} · ${nOpen}/${nAll} ${LX('abiertos', 'open')}</div>${html}</div>
+    <div class="bar"><button class="s" data-a="back">${LX('VOLVER', 'BACK')}</button></div>`);
+  xEl.querySelectorAll('[data-k]').forEach(b => b.onclick = () => { initAudio();
+    if (b.dataset.lock) { sfxBlip(220, 0.08); b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake'); return; }
+    sfxBlip(900, 0.05); trackGo(b.dataset.k); });
+  xEl.querySelector('[data-a="back"]').onclick = () => { initAudio(); hidePanel(); };
+  const cur = xEl.querySelector('.tk.cur'); if (cur) setTimeout(() => { try { cur.scrollIntoView({ block: 'center' }); } catch(e) {} }, 30);
+}
+(function () { const st = document.createElement('style'); st.textContent = `
+#menu .card.trk{cursor:pointer}
+#menu .card .lab .all{float:right;font-style:normal;font-size:11px;letter-spacing:1px;color:#fff;background:rgba(225,37,27,.85);padding:1px 7px;border-radius:5px}
+#xp .tks{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:6px 0 4px}
+#xp .tk{position:relative;display:flex;flex-direction:column;align-items:flex-start;text-align:left;padding:8px 9px;border-radius:12px;color:#fff;min-height:118px;
+  background:linear-gradient(160deg,rgba(255,255,255,.10),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.14);overflow:hidden}
+#xp .tk svg{width:100%;height:58px;margin-bottom:4px}
+#xp .tk b{font-size:15px;font-weight:800;font-style:italic;line-height:1.1}
+#xp .tk span{font-size:11.5px;font-weight:700;color:#9fb2c4;margin-top:2px}
+#xp .tk.cur{border:2px solid #e1251b;box-shadow:0 0 14px rgba(225,37,27,.4);background:linear-gradient(160deg,rgba(225,37,27,.25),rgba(255,255,255,.03))}
+#xp .tk.cur span:last-child{color:#ff8a80}
+#xp .tk.lock{filter:saturate(.15) brightness(.6)}
+#xp .tk.lock span:last-child{color:#ffb347}
+`; document.head.appendChild(st); })();
 function openTTPanel() {
-  const L = freeTracks(), n = ttMedalCount();
+  const L = freeTracks().filter(k => k === 'diaria' || TT_MEDALS[k]), n = ttMedalCount();
   let html = '', lastCup = '';
   for (const k of L) {
     const cup = k === 'diaria' ? 'hoy' : trackCup(k); if (cup !== lastCup) { html += `<div class="sec">${cup === 'hoy' ? '📅 CIRCUITO DEL DÍA · CAMBIA MAÑANA' : 'COPA ' + CUPS[cup].name}</div>`; lastCup = cup; }
