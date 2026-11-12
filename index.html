@@ -15,6 +15,18 @@
 </style>
 </head>
 <body>
+<div id="ld" style="display:none"><div class="lb"><small>CARGANDO</small><b id="ldN"></b><i><span></span></i></div></div>
+<style>
+#ld{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:radial-gradient(90% 60% at 50% 45%,#161b24,#07090c 80%);
+  font-family:"Barlow Condensed","Arial Narrow",sans-serif;color:#fff;transition:opacity .35s}
+#ld .lb{text-align:center;transform:skewX(-8deg)}
+#ld small{display:block;font-size:15px;font-weight:800;letter-spacing:6px;color:#e1251b}
+#ld b{display:block;font-size:min(13vw,56px);font-weight:800;font-style:italic;line-height:1.05;margin:6px 18px 16px;text-shadow:0 4px 18px rgba(0,0,0,.6)}
+#ld i{display:block;width:180px;height:5px;margin:0 auto;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden}
+#ld i span{display:block;width:40%;height:100%;background:#e1251b;border-radius:3px;animation:ldBar 1s ease-in-out infinite}
+@keyframes ldBar{0%{transform:translateX(-110%)}100%{transform:translateX(280%)}}
+</style>
+<script>try { const n = sessionStorage.getItem('driftloop_ld'); if (n) { document.getElementById('ldN').textContent = n; document.getElementById('ld').style.display = 'flex'; } } catch(e) {}</script>
 <canvas id="c"></canvas>
 <script>
 /* =====================================================================
@@ -2377,7 +2389,7 @@ function audioSetModel(key) {
   if (AU.eng) AU.eng.stop();
   AU.eng = engPlayer(AU.ac, AU.engBus, s.on, s.off, false); AU.engModel = key;
 }
-setTimeout(prepStep, 400);
+setTimeout(prepStep, (() => { try { return sessionStorage.getItem('driftloop_ld') ? 1600 : 400; } catch(e) { return 400; } })());
 function initAudio() {
   if (AU.ok) { try { AU.ac.resume(); } catch(e) {} return; }
   try {
@@ -2768,7 +2780,7 @@ function cycleTrack() {
   const k = TRACK_KEYS[(TRACK_KEYS.indexOf(TRACK_KEY) + 1) % TRACK_KEYS.length];
   try { localStorage.setItem('driftloop_track', k); } catch(e) {}
   reloading = true; render();
-  setTimeout(() => { try { location.hash = k; } catch(e) {} location.reload(); }, 60);
+  setTimeout(() => { try { location.hash = k; } catch(e) {} reloadTo(); }, 30);
 }
 function cycleWeather() {
   const k = WEATHER_KEYS[(WEATHER_KEYS.indexOf(WX_KEY) + 1) % WEATHER_KEYS.length];
@@ -4630,7 +4642,7 @@ function cycleTrackDir(dir) {
   const L = freeTracks(), i = L.indexOf(TRACK_KEY), k = L[((i < 0 ? 0 : i + dir) + L.length) % L.length];
   try { localStorage.setItem('driftloop_track', k); } catch(e) {}
   reloading = true; mEl.style.display = 'none'; render();
-  setTimeout(() => { try { location.hash = k; } catch(e) {} location.reload(); }, 60);
+  setTimeout(() => { try { location.hash = k; } catch(e) {} reloadTo(); }, 30);
 }
 function cycleWeatherDir(dir) {
   const k = WEATHER_KEYS[(WEATHER_KEYS.indexOf(WX_KEY) + dir + WEATHER_KEYS.length) % WEATHER_KEYS.length];
@@ -4786,6 +4798,8 @@ const RCSS = `
 #res .cp{margin:8px 12px 0;padding:8px 12px;border-radius:10px;background:rgba(255,255,255,.06);font-size:16px;font-weight:700}
 #res .cp b{color:#ffd23f;font-style:italic;margin-right:4px}
 #res .cp span{display:block;color:#b9c1ca;font-size:14px;margin-top:2px}
+#res .bt .go.cupb{font-size:min(20px,5vw);padding:0 6px}
+#res .bt .go.cupb span{white-space:nowrap}
 #res .bt .gold{background:linear-gradient(180deg,#ffd84a,#d9a400);color:#111}
 #res .bt .s{flex:1;height:58px;border-radius:10px;font-size:17px;white-space:nowrap;font-weight:800;font-style:italic;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15)}
 `;
@@ -4818,7 +4832,7 @@ function resPodium() {
 function resRender() {
   const p = player.pos, win = p === 1, ep = player.earnParts || {};
   const a = d => ` in" style="animation-delay:${d}s`;
-  rEl.classList.toggle('tight', (player.awards || []).length + (player.champInfo ? 2 : 0) + (newRaceRec || newLapRec ? 1 : 0) >= 3);
+  rEl.classList.toggle('tight', true);
   rEl.scrollTop = 0;
   rEl.innerHTML = `
     <div class="ttl${a(0)}"><b class="${win ? 'win' : ''}">${win ? '¡GANASTE!' : p + '° PUESTO'}</b><span>${fmtTime(player.finishTime)} · ${TRK.name} · ${WX.icon}️ ${WX.name}</span></div>
@@ -4828,7 +4842,8 @@ function resRender() {
     <div class="earn${a(0.32)}"><div class="big"><b id="rEarn">+$ 0</b><span>EN TU CUENTA ${fmtMoney(prof.money)}</span></div>
       <div class="br"><span>Puesto ${fmtMoney(ep.puesto || 0)}</span>${ep.event ? `<span style="color:#d9c2ff">⭐ Evento +${fmtMoney(ep.event)}</span>` : eventMode ? '<span style="color:#d9c2ff">⭐ XP ×2</span>' : ''}${ep.drifts ? `<span>${ep.drifts} drifts × $30</span>` : ''}${ep.rec ? '<span>Récord +$300</span>' : ''}${ep.mult > 1 ? `<span>Clima ×${ep.mult}</span>` : ''}${ep.daily ? '<span style="color:#ffd23f">📅 Del día ×2</span>' : ''}${ep.dailyPod ? '<span style="color:#3dff8a">1er podio de hoy +$1000</span>' : ''}</div></div>
     ${xpHTML(player.xpGain).replace('class="xpb"', 'class="xpb' + a(0.34) + '"')}
-    ${(player.awards || []).length ? `<div class="aw${a(0.36)}">` + player.awards.map(g => `<div><b>${g.ico} ${g.kind}</b> ${g.txt}<i>+${fmtMoney(g.pay)}</i></div>`).join('') + '</div>' : ''}
+    ${(player.awards || []).length ? (() => { const aw = player.awards, tot = aw.reduce((x, g) => x + g.pay, 0), top = aw.slice(0, 2);
+       return `<div class="aw${a(0.36)}">` + top.map(g => `<div><b>${g.ico} ${g.kind}</b> ${g.txt}<i>+${fmtMoney(g.pay)}</i></div>`).join('') + (aw.length > 2 ? `<div class="more"><b>+${aw.length - 2} ${EN ? 'more' : 'más'}</b><i>+${fmtMoney(aw.slice(2).reduce((x, g) => x + g.pay, 0))}</i></div>` : '') + '</div>'; })() : ''}
     ${player.champInfo ? `<div class="cp${a(0.38)}"><b>COPA ${CUPS[player.champInfo.cup].name}</b> +${player.champInfo.pts} pts · ${player.champInfo.last ? 'última carrera' : 'carrera ' + (player.champInfo.round + 1) + ' de ' + CHAMP.length}
        <span>${(player.champInfo.final ? player.champInfo.final.standings : champStandings()).slice(0, 3).map((e, i) => (i + 1) + '° ' + (e.name === 'VOS' ? 'VOS' : e.name) + ' ' + e.pts).join(' · ')}</span></div>` : ''}
     ${adsCanDouble() ? `<button class="adx${a(0.35)}" data-a="x2">🎬 DUPLICAR PREMIO · +${fmtMoney(player.earn)}</button>` : ''}
@@ -4836,7 +4851,7 @@ function resRender() {
     ${rpAvailable() ? `<div class="rpb${a(0.38)}"><button data-a="rp">🎬 REPETICIÓN</button><button data-a="clip">📲 GUARDAR CLIP</button></div>` : ''}
     <div class="bt${a(0.4)}">${player.champInfo
       ? (player.champInfo.last ? '<button class="go gold" data-a="final">VER RESULTADO 🏆</button>' : '<button class="go" data-a="next">SIGUIENTE ▶</button>') + '<button class="s" data-a="menu">MENÚ</button>'
-      : (!eventMode && !reqMode && guideCup() ? `<button class="go" data-a="cup">${guideCup().on ? 'SEGUIR COPA' : 'COPA ' + CUPS[guideCup().k].name} ▶</button><button class="s" data-a="again">REVANCHA</button><button class="s" data-a="menu">MENÚ</button>`
+      : (!eventMode && !reqMode && guideCup() ? `<button class="go cupb" data-a="cup"><span>${guideCup().on ? (EN ? 'NEXT RACE' : 'SIGUIENTE') : 'COPA ' + CUPS[guideCup().k].name} ▶</span></button><button class="s" data-a="again">REVANCHA</button><button class="s" data-a="menu">MENÚ</button>`
         : '<button class="go" data-a="again">REVANCHA ▶</button><button class="s" data-a="gar">GARAJE</button><button class="s" data-a="menu">MENÚ</button>')}</div>`;
   resPodium();
   if (player.xpGain && player.xpGain.ups.length && !player.xpGain.shown) { player.xpGain.shown = true; const ups = player.xpGain.ups; setTimeout(() => { if (resShown) showLevelUp(ups); }, 1700); }
@@ -4893,7 +4908,7 @@ function nextGoalHTML(a) {
   const nx = Object.keys(LEVEL_UNLOCKS).map(Number).find(l => l > (prof.lvl || 1));
   if (nx) lines.push('Nivel ' + nx + ' · 🔓 ' + LEVEL_UNLOCKS[nx]);
   if (!lines.length) return '';
-  return `<button class="ng${a || ''}" data-a="gar"><b>🎯 PRÓXIMA META</b>${lines.slice(0, 3).map(l => `<span>${l}</span>`).join('')}</button>`;
+  return `<button class="ng${a || ''}" data-a="gar"><b>🎯 PRÓXIMA META</b><span>${lines[0]}</span></button>`;
 }
 (function () { const st = document.createElement('style'); st.textContent = `
 #res .ng{display:block;width:calc(100% - 24px);margin:8px 12px 0;padding:8px 12px;border-radius:10px;text-align:left;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16)}
@@ -5008,7 +5023,7 @@ function champGo() {      // ir a la fecha que toca (recarga si el circuito es o
   if (r.track !== TRACK_KEY) {
     try { localStorage.setItem('driftloop_track', r.track); localStorage.setItem('driftloop_champgo', '1'); } catch(e) {}
     reloading = true; render();
-    setTimeout(() => { try { location.hash = r.track; } catch(e) {} location.reload(); }, 60);
+    setTimeout(() => { try { location.hash = r.track; } catch(e) {} reloadTo(); }, 30);
     return;
   }
   startChampRace();
@@ -5458,7 +5473,7 @@ function dailyGo(mode) {
   }
   try { localStorage.setItem('driftloop_track', 'diaria'); localStorage.setItem('driftloop_dailygo', mode); } catch(e) {}
   reloading = true; hidePanel(); render();
-  setTimeout(() => { try { location.hash = 'diaria'; } catch(e) {} location.reload(); }, 60);
+  setTimeout(() => { try { location.hash = 'diaria'; } catch(e) {} reloadTo(); }, 30);
 }
 function openChallengesPanel() {
   const daily = dailyList();
@@ -5592,7 +5607,7 @@ function ttGo(k) {
   if (k === TRACK_KEY) { startTT(); return; }
   try { localStorage.setItem('driftloop_track', k); localStorage.setItem('driftloop_ttgo', '1'); } catch(e) {}
   reloading = true; hidePanel(); render();
-  setTimeout(() => { try { location.hash = k; } catch(e) {} location.reload(); }, 60);
+  setTimeout(() => { try { location.hash = k; } catch(e) {} reloadTo(); }, 30);
 }
 // grabación de la vuelta en curso (20 muestras por segundo)
 function ttTick() {
@@ -5717,7 +5732,7 @@ function trackGo(k) {
   if (k === TRACK_KEY) { hidePanel(); return; }
   try { localStorage.setItem('driftloop_track', k); } catch(e) {}
   reloading = true; hidePanel(); mEl.style.display = 'none'; render();
-  setTimeout(() => { try { location.hash = k; } catch(e) {} location.reload(); }, 60);
+  setTimeout(() => { try { location.hash = k; } catch(e) {} reloadTo(); }, 30);
 }
 function openTracksPanel() {
   const tile = (k, lock, tag) => { const T = TRACKS[k], cur = k === TRACK_KEY;
@@ -6647,7 +6662,7 @@ function eventGo() {
   const w = weekInfo();
   if (w.track !== TRACK_KEY) {
     try { localStorage.setItem('driftloop_track', w.track); localStorage.setItem('driftloop_evgo', '1'); } catch(e) {}
-    reloading = true; hidePanel(); render(); setTimeout(() => { try { location.hash = w.track; } catch(e) {} location.reload(); }, 60); return;
+    reloading = true; hidePanel(); render(); setTimeout(() => { try { location.hash = w.track; } catch(e) {} reloadTo(); }, 30); return;
   }
   startEvent();
 }
@@ -6779,7 +6794,7 @@ function reqGo(id) {
   const e = REQ_EVENTS.find(x => x.id === id);
   if (e.track !== TRACK_KEY) {
     try { localStorage.setItem('driftloop_track', e.track); localStorage.setItem('driftloop_reqgo', id); } catch(_) {}
-    reloading = true; hidePanel(); render(); setTimeout(() => { try { location.hash = e.track; } catch(_) {} location.reload(); }, 60); return;
+    reloading = true; hidePanel(); render(); setTimeout(() => { try { location.hash = e.track; } catch(_) {} reloadTo(); }, 30); return;
   }
   startReq(id);
 }
@@ -6885,7 +6900,7 @@ function licGo(id) {
   const t = LIC_TESTS.find(x => x.id === id), tk = t.lic.track;
   if (tk !== TRACK_KEY) {
     try { localStorage.setItem('driftloop_licback', TRACK_KEY); localStorage.setItem('driftloop_track', tk); localStorage.setItem('driftloop_licgo', id); } catch(_) {}
-    reloading = true; hidePanel(); render(); setTimeout(() => { try { location.hash = tk; } catch(_) {} location.reload(); }, 60); return;
+    reloading = true; hidePanel(); render(); setTimeout(() => { try { location.hash = tk; } catch(_) {} reloadTo(); }, 30); return;
   }
   startLic(id);
 }
@@ -7606,6 +7621,20 @@ const skEl = document.createElement('div'); skEl.id = 'introSkip'; skEl.innerHTM
     else if (SET.intro !== false && !prof.introSeen) { prof.introSeen = 1; saveProf(); startIntro(); } else { spEl.style.display = 'none'; introPhase = null; } });
   skEl.addEventListener('click', () => { if (introPhase === 'play' && introT > 0.6) endIntro(true); });
 })();
+// recarga con pantalla de carga: el nombre del circuito queda en pantalla hasta que el nuevo está listo
+function reloadTo() {
+  let n = '';
+  try { const k = (location.hash || '').slice(1); n = TRACKS[k] ? TRACKS[k].name : ''; sessionStorage.setItem('driftloop_ld', n || ' '); } catch(e) {}
+  try { const ld = document.getElementById('ld'); document.getElementById('ldN').textContent = n; ld.style.opacity = 1; ld.style.display = 'flex'; } catch(e) {}
+  setTimeout(() => location.reload(), 30);
+}
+function hideLoad() {
+  try { sessionStorage.removeItem('driftloop_ld'); } catch(e) {}
+  const ld = document.getElementById('ld'); if (!ld || ld.style.display === 'none') return;
+  ld.style.opacity = 0; setTimeout(() => { ld.style.display = 'none'; }, 380);
+}
+// se va cuando el piso que rodea al auto ya está dibujado (o a los 2,5 s, lo que pase primero)
+(function waitLoad(t0) { const go = () => { if (bakeQueue.length === 0 || performance.now() - t0 > 2500) hideLoad(); else requestAnimationFrame(go); }; requestAnimationFrame(go); })(performance.now());
 function placeOv(e) { e.style.left = Math.round((innerWidth - W)/2) + 'px'; e.style.width = W + 'px'; }
 addEventListener('resize', () => { placeOv(spEl); placeOv(skEl); });
 function showSplash() { introPhase = 'splash'; state = 'menu'; placeOv(spEl); spEl.style.display = 'flex'; }
