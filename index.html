@@ -1803,12 +1803,12 @@ MODELS.f1 = { name: 'Fórmula GP', desc: 'La máxima categoría: frena tardísim
             hp: 950, kg: 800, drv: 'T', formula: true, mass: 0.6, steerK: 1.15, brakeK: 1.4, shape: 'formula',
             len: 46, wid: 22, vmax: 1.2, acc: 1.26, grip: 1.3, wt: 0.55,
             snd: { cyl: 12, cross: false, scale: 1.45, fc: 1.9, pipe: 0.34, d1: 0.0013 } };
-// Motos: aceleran como nada, se inclinan en las curvas y un golpe fuerte las tira al piso (pierden un segundo y medio)
+// Motos: aceleran como nada, se inclinan en las curvas y un golpe fuerte las hace tambalear (no se caen)
 MODELS.scooter = { name: 'Scooter', desc: 'Lenta, simpática y más difícil de lo que parece. Todos empiezan por acá.', price: 1500, lvl: 2,
             hp: 15, kg: 110, drv: 'T', moto: true, mass: 0.2, steerK: 1.2, brakeK: 0.9, shape: 'moto', kit: 'scooter',
             len: 28, wid: 11, vmax: 0.7, acc: 0.82, grip: 0.96, wt: 0.7,
             snd: { cyl: 4, cross: false, scale: 1.7, fc: 2.2, pipe: 0.3, d1: 0.0011 } };
-MODELS.moto = { name: 'Moto Deportiva', desc: 'Sale disparada y se acuesta en cada curva. No toques a nadie.', price: 7000, lvl: 6,
+MODELS.moto = { name: 'Moto Deportiva', desc: 'Sale disparada y se acuesta en cada curva. Livianísima: cualquier toque la desacomoda.', price: 7000, lvl: 6,
             hp: 130, kg: 190, drv: 'T', moto: true, mass: 0.25, steerK: 1.2, brakeK: 1.05, shape: 'moto',
             len: 34, wid: 12, vmax: 1.04, acc: 1.4, grip: 1.04, wt: 0.6,
             snd: { cyl: 4, cross: false, scale: 1.55, fc: 2.0, pipe: 0.32, d1: 0.0012 } };
@@ -2689,10 +2689,7 @@ function popup(txt, col, big) { popups.push({ txt, col, big: !!big, t: 0 }); if 
 function nearCam(x, y, r) { return Math.abs(x - cam.x) < r && Math.abs(y - cam.y) < r; }
 
 function damageCar(c, power, wx, wy) {
-  if (c.moto && power > 75 && state === 'race' && !(c.fallT > 0) && !(c.fallCd > 0)) {   // la moto se cae: resbala sin acelerar y se levanta sola
-    c.fallT = 1.5; c.fallCd = 3.2; c.fallS = Math.random() < 0.5 ? -1 : 1;
-    if (c.isPlayer) { popup(EN ? 'CRASH!' : '¡CAÍDA!', '#ff5a4a', true); try { sfxPop(); } catch(e) {} }
-  }
+  if (c.moto && power > 75 && state === 'race' && !(c.wobT > 0)) c.wobT = 0.45;   // la moto no se cae: un golpe fuerte solo la hace tambalear un momento
   if (!SET.damage || state !== 'race' || power < 90) return;
   const amt = Math.min(0.2, (power - 90)/1300); if (amt <= 0) return;
   const before = c.dmg || 0; c.dmg = Math.min(1, before + amt);
@@ -2872,8 +2869,7 @@ function wallCheck(c) {
 }
 
 function stepCar(c, dt, throttle) {
-  if (c.fallCd > 0) c.fallCd -= dt;
-  if (c.fallT > 0) { c.fallT -= dt; throttle = false; const k = Math.exp(-0.9*dt); c.vx *= k; c.vy *= k; if (Math.random() < 0.5) part(c.x, c.y, rand(-40, 40), rand(-40, 40), 0.3, 2, 'spark', 0); }
+  if (c.wobT > 0) c.wobT -= dt;
   c.throttle = throttle;
   if (c.airT > 0) {                       // en el aire: sin agarre ni dirección, sigue de largo
     c.airT -= dt; if (c.boostT > 0) c.boostT -= dt;
@@ -3462,8 +3458,8 @@ function render() {
     if (BRIDGE && carLevel(c)) { const b2 = bodyOff(c); ctx.save(); ctx.globalAlpha = 0.75; ctx.translate(c.wx + SUN.x*12 - b2[0]*0.8, c.wy + SUN.y*12 - b2[1]*0.8); ctx.rotate(c.va); ctx.drawImage(carShadowFor(c.model), -30, -18, 60, 36); ctx.restore(); }
     const bo = bodyOff(c); ctx.save(); ctx.translate(c.wx + bo[0], c.wy + bo[1]); ctx.rotate(c.va); if (c.airT > 0) { const sc = 1 + airH(c)*0.6; ctx.scale(sc, sc); }
     if (c.moto) {   // se acuesta hacia adentro de la curva; caída: de costado en el piso
-      if (c.fallT > 0) { ctx.rotate(0.55*(c.fallS || 1)); ctx.scale(1, 1.9); }
-      else { const ln = Math.max(-1, Math.min(1, (c.r || 0)*(c.v || 0)/420)); c.lean = (c.lean || 0) + (ln - (c.lean || 0))*0.2; ctx.translate(0, c.lean*2.6); ctx.scale(1, 1 + Math.abs(c.lean)*0.55); }
+      if (c.wobT > 0) ctx.rotate(Math.sin(c.wobT*40)*0.12*c.wobT/0.45);
+      { const ln = Math.max(-1, Math.min(1, (c.r || 0)*(c.v || 0)/420)); c.lean = (c.lean || 0) + (ln - (c.lean || 0))*0.2; ctx.translate(0, c.lean*2.6); ctx.scale(1, 1 + Math.abs(c.lean)*0.55); }
     }
     ctx.drawImage(carSprite(c), -30, -18, 60, 36); drawDamage(c); if (FXL >= 3 && c.isPlayer) drawSheen(c);
     if (c.popFx > 0) { const L = LAYOUT[c.model], s = 10 + c.popFx*120; ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(puffGlowWarm, L.tail - s*1.1, -s/2, s, s); ctx.drawImage(puffGlowRed, L.tail - s*1.4, -s*0.35, s*0.7, s*0.7); ctx.globalCompositeOperation = 'source-over'; }
@@ -6797,9 +6793,9 @@ const LICS = [
     { id: 'F2', name: 'Vuelta limpia en Fórmula Junior', en: 'Clean lap in Formula Junior', car: 'fjr', frac: 1, rule: 'clean', t: [25.0, 23.2, 21.9] },
     { id: 'F3', name: 'Vuelta en Fórmula GP', en: 'Lap in Formula GP', car: 'f1', frac: 1, t: [22.8, 21.2, 20.0] } ] },
   { k: 'M', name: 'LICENCIA M · MOTOS', en: 'M LICENSE · BIKES', col: '#b98cff', track: 'granpremio', need: ['B'], prize: 4000, gold: 8000, tests: [
-    { id: 'M1', name: 'Primeras curvas en Scooter', en: 'First corners on the Scooter', car: 'scooter', frac: 0.3, rule: 'nofall', t: [10.8, 10.0, 9.4] },
-    { id: 'M2', name: 'Vuelta sin caerte', en: 'A lap without falling', car: 'moto', frac: 1, rule: 'nofall', t: [25.2, 23.4, 22.1] },
-    { id: 'M3', name: 'Vuelta en Superbike sin caerte', en: 'Superbike lap without falling', car: 'superbike', frac: 1, rule: 'nofall', t: [23.3, 21.7, 20.4] } ] },
+    { id: 'M1', name: 'Primeras curvas en Scooter', en: 'First corners on the Scooter', car: 'scooter', frac: 0.3, t: [10.8, 10.0, 9.4] },
+    { id: 'M2', name: 'Vuelta limpia en moto', en: 'Clean bike lap', car: 'moto', frac: 1, rule: 'clean', t: [25.2, 23.4, 22.1] },
+    { id: 'M3', name: 'Vuelta en Superbike', en: 'Superbike lap', car: 'superbike', frac: 1, t: [23.3, 21.7, 20.4] } ] },
   { k: 'S', name: 'SÚPER LICENCIA', en: 'SUPER LICENSE', col: '#ffe36b', track: 'serpentina', need: ['B', 'R', 'C', 'F', 'M'], prize: 8000, gold: 20000, tests: [
     { id: 'S1', name: 'Vuelta limpia con el Hiper V12', en: 'Clean lap in the Hyper V12', car: 'hiper', frac: 1, rule: 'clean', t: [30.2, 28.1, 26.5] },
     { id: 'S2', name: 'Dos vueltas con lluvia en el Prototipo', en: 'Two wet laps in the Prototype', car: 'proto', frac: 2, wx: 'lluvia', t: [64.2, 59.6, 56.2] } ] }
