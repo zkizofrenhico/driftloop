@@ -136,7 +136,7 @@ const I18N_EN = {
   '⤢ VER': '⤢ VIEW', 'Girá el celular': 'Rotate your phone', 'Drift Loop se juega en vertical': 'Drift Loop is played in portrait',
   // ---- garaje ----
   'CARROCERÍA': 'BODY', 'COLOR': 'COLOR', 'DISEÑO': 'DESIGN', 'FRANJAS': 'STRIPES', 'MODELO': 'MODEL', 'NÚMERO': 'NUMBER', 'MEJORAS': 'UPGRADES',
-  'ESTILO': 'STYLE', 'TALLER': 'WORKSHOP', 'Las mejoras sirven para todos tus autos. Suben los caballos (CV) y los puntos de rendimiento (PR), que definen la clase del auto: D, C, B, A o S.': 'Upgrades apply to all your cars. They raise horsepower (CV) and performance points (PR), which set the car class: D, C, B, A or S.', 'EN USO': 'IN USE', '✓ EN USO': '✓ IN USE', 'TUYO': 'OWNED', 'USAR ESTE AUTO': 'USE THIS CAR', 'MÁXIMO': 'MAX',
+  'ESTILO': 'STYLE', 'Dejá el dedo apretado para acelerar. El auto dobla solo.': 'Keep your finger down to speed up. The car steers itself.', 'CARRERA LIBRE': 'FREE RACE', 'SEGUIR': 'CONTINUE', 'TALLER': 'WORKSHOP', 'Las mejoras sirven para todos tus autos. Suben los caballos (CV) y los puntos de rendimiento (PR), que definen la clase del auto: D, C, B, A o S.': 'Upgrades apply to all your cars. They raise horsepower (CV) and performance points (PR), which set the car class: D, C, B, A or S.', 'EN USO': 'IN USE', '✓ EN USO': '✓ IN USE', 'TUYO': 'OWNED', 'USAR ESTE AUTO': 'USE THIS CAR', 'MÁXIMO': 'MAX',
   'VISTA PREVIA · TUYO': 'PREVIEW · OWNED', 'VOLVER': 'BACK', 'CERRAR': 'CLOSE', 'COMPRAR': 'BUY',
   'Comprá con tu plata o desbloqueá con logros. Lo que ya es tuyo se elige con un toque.': 'Buy with your cash or unlock with achievements. Anything you own is one tap away.',
   'Las mejoras sirven para todos tus autos. Los rivales también se van poniendo mejores, así que la carrera sigue pareja.': 'Upgrades apply to all your cars. Rivals keep improving too, so races stay close.',
@@ -2635,7 +2635,15 @@ function makeCar(isPlayer) {
     lapsDone: -1, lapStartT: 0, lastLap: 0, bestLap: 0, finished: false, finishTime: 0, pos: 0, hitCd: 0, draft: false, throttle: false };
 }
 
+function showcaseWx() {
+  try {
+    if (champRace || tut || eventMode || reqMode || licMode || ttMode || duoMode || driftMode) return;
+    const k = prof.stats.races === 1 && (prof.weather || 'dia') === 'dia' ? 'noche' : (prof.weather || 'dia');
+    if (WX_KEY !== k) { const wet = WX.wet; applyWeather(k); rainDrops.length = 0; if (WX.wet !== wet) clearTiles(); }
+  } catch(e) {}
+}
 function resetRace() {
+  showcaseWx();
   if (ttMode) C.rivales = 0;
   resetDynWeather();
   if (champRace && !prof.champ) champRace = false;   // la copa ya terminó
@@ -2645,7 +2653,9 @@ function resetRace() {
   const pal = shuffle(RIVAL_COLORS), names = shuffle(NAMES);
   // los rivales se ponen un poco mejores con tu auto/mejoras y con tus victorias (la carrera sigue pareja)
   const ps = playerStats(), pp = (ps.vmax - 1)*0.6 + (ps.grip - 1)*0.5 + (ps.acc - 1)*0.2;
-  const hab = C.habilidadRivales*(1 + Math.min(0.12, Math.max(0, pp)*0.5) + Math.min(0.05, rec.wins*0.005));
+  const adapt = ((prof.cups || {}).plata || 99) <= 3 ? 1 : 0;   // al principio las mejoras se sienten enteras
+  const ease = prof.stats && prof.stats.races < 5 ? 0.9 : 1;   // primeras carreras: rivales más tranquilos
+  const hab = ease*C.habilidadRivales*(1 + adapt*(Math.min(0.12, Math.max(0, pp)*0.5) + Math.min(0.05, rec.wins*0.005)));
   const AI_MODELS = reqMode ? reqAIModels() : MODELS[prof.model].truck ? ['camion', 'camion', 'camionx'] : MODELS[prof.model].formula || MODELS[prof.model].moto ? [prof.model] : ['gt', 'gt', 'hatch', 'muscle'];
   cars = []; let ai = 0;
   for (let i = 0; i < n; i++) {
@@ -2804,7 +2814,7 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => { if ((e.code === 'Enter' || e.code === 'KeyL') && typeof keyHeld2 !== 'undefined') keyHeld2 = false; if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') keyHeld = false; if (e.code === 'ArrowDown' || e.code === 'KeyS') keyRev = false; });
 
 const LAUNCH = { pressCd: null, rev: 0 };
-function startCountdown() { banners.length = 0; confetti.length = 0; popups.length = 0; state = 'countdown'; countdown = 3.4; stateT = 0; camT = 0.8; LAUNCH.pressCd = null; }
+function startCountdown() { try { document.querySelectorAll('.toast').forEach(e => e.remove()); } catch(e) {} banners.length = 0; confetti.length = 0; popups.length = 0; state = 'countdown'; countdown = 3.4; stateT = 0; camT = 0.8; LAUNCH.pressCd = null; }
 
 /* =====================================================================
    FÍSICA REALISTA (la misma para vos y para los rivales)
@@ -3272,9 +3282,10 @@ function update(dt) {
       if (sayOK() && !tut) sayPick(['¡Largamos!', '¡Luz verde! ¡A fondo!', '¡Y largan!'], ['Go, go, go!', 'Green light! Floor it!', 'And they\'re off!']);
       // largada estilo Mario Kart: apretar justo antes del verde = turbo; demasiado temprano = se ahoga
       const pc = held ? LAUNCH.pressCd : null, vm = C.velocidadMaxima;
-      if (pc !== null && pc >= 0.12 && pc <= 0.6) { giveSpeed(player, vm*0.45); player.boostT = 1.6; if (player.st) player.st.perfectStart = true; popup('¡SALIDA PERFECTA!', '#ffd23f', true); sfxBoost(1); shake = Math.max(shake, 5); }
+      if (tut) { if (held) { giveSpeed(player, vm*0.4); player.boostT = 1.2; popup('¡BUENA SALIDA!', '#7dffb0', true); sfxBoost(0.8); } }
+      else if (pc !== null && pc >= 0.12 && pc <= 0.6) { giveSpeed(player, vm*0.45); player.boostT = 1.6; if (player.st) player.st.perfectStart = true; popup('¡SALIDA PERFECTA!', '#ffd23f', true); sfxBoost(1); shake = Math.max(shake, 5); }
       else if (pc !== null && pc > 0.6 && pc <= 1.05) { giveSpeed(player, vm*0.3); player.boostT = 0.7; popup('¡BUENA SALIDA!', '#7dffb0', true); sfxBoost(0.6); }
-      else if (pc !== null && pc > 1.6) { player.stallT = 1.0; popup('¡PASADO DE VUELTAS!', '#ff5a4a', true); }
+      else if (pc !== null && pc > 1.6 && prof.stats.races >= 3) { player.stallT = 1.0; popup('¡PASADO DE VUELTAS!', '#ff5a4a', true); }
       else if (held) giveSpeed(player, 70);
       if (duoMode && p2) duoLaunch(p2, held2 ? LAUNCH2.pressCd : null, held2);
       for (const c of cars) if (!c.isPlayer && !c.isP2) {
@@ -3292,7 +3303,12 @@ function update(dt) {
     for (const c of cars) {
       if (!racing) continue;
       laneLogic(c, h);
-      if (c.isPlayer && !duoMode) c.reverse = state === 'race' && isRev();
+      if (c.isPlayer && !duoMode) {
+        c.stuckT = state === 'race' && held && raceTime > 2.5 && c.v < 22 && !(c.stallT > 0) && !(c.autoRev > 0) ? c.stuckT + h : 0;
+        if (c.stuckT > 1.3) { c.autoRev = 1.1; c.stuckT = 0; }
+        if (c.autoRev > 0) c.autoRev -= h;
+        c.reverse = state === 'race' && (isRev() || c.autoRev > 0);
+      }
       else if (state === 'race' && !c.finished) {
         if (!c.reverse) {
           c.stuckT = c.v < 25 ? c.stuckT + h : 0;
@@ -3781,7 +3797,7 @@ function drawLights() {
       ctx.restore();
       if (ph < 0.1) shake = Math.max(shake, 3);
     } }
-  if (state === 'countdown') { txt('APRETÁ JUSTO ANTES DEL VERDE = TURBO', W/2, by + 86, 15, '#ffd23f', 'center', true); txt('Muy temprano se ahoga el motor', W/2, by + 106, 13, '#c9d1d9', 'center', true, '600'); }
+  if (state === 'countdown' && !tut) { txt('APRETÁ JUSTO ANTES DEL VERDE = TURBO', W/2, by + 86, 15, '#ffd23f', 'center', true); txt('Muy temprano se ahoga el motor', W/2, by + 106, 13, '#c9d1d9', 'center', true, '600'); }
 }
 
 /* ---------- HUD estilo transmisión ---------- */
@@ -4558,6 +4574,14 @@ const MCSS = `
 @keyframes shine{0%,55%{left:-60%}100%{left:130%}}
 #menu .go:active{transform:scale(.98)}
 #menu .row2{display:flex;gap:8px;margin:8px 12px 0}
+#menu .go.cupgo{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
+#menu .go.cupgo span{font-size:min(27px,6.6vw);white-space:nowrap;line-height:1.05}
+#menu .row2 .sec,#menu .row3 .sec{white-space:nowrap;font-size:min(17px,4.3vw)}
+#menu .row3 .sec{min-width:0;padding:0 4px;font-size:min(15px,3.8vw)}
+#menu .row3 .sec{flex:1 1 0}
+#menu .row3 .sec[data-a=chal]{flex:2.2 1 0}
+#menu .row3 .sec.ic{flex:0 0 46px}
+#menu .go.cupgo small{font-size:13px;font-weight:700;font-style:normal;letter-spacing:.5px;opacity:.9}
 #menu .sec{flex:1;height:48px;border-radius:9px;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.14);
   font-size:19px;font-weight:800;font-style:italic;letter-spacing:.5px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
 #menu .sec:active{background:rgba(255,255,255,.18)}
@@ -4615,6 +4639,7 @@ function cycleWeatherDir(dir) {
 function mRender(anim) {
   const a = (d) => anim ? ` in" style="animation-delay:${d}s` : '';
   const ps = playerStats(), m = MODELS[prof.model];
+  const lv = prof.lvl || 1, gc = prof.tut ? guideCup() : null, adv = lv >= 3 || (SET.mode && SET.mode !== 'carrera');
   mEl.innerHTML = `
     <div class="top${a(0)}">${lvlPillHTML()}${prof.streak && prof.streak.n > 1 ? `<div class="pill strk">🔥 ${prof.streak.n}</div>` : ''}<div class="pill money">${fmtMoney(prof.money)}</div></div>
     <div class="logo${a(0.05)}"><div class="l1">DRIFT</div><div class="l2">LOOP</div>
@@ -4627,19 +4652,21 @@ function mRender(anim) {
       <div class="card"><div class="lab">CLIMA</div><div class="val">${WX.name}</div><div class="sub${WX.pay > 1 ? ' g' : ''}">${WX.pay > 1 ? 'Premio ×' + WX.pay : 'Premio normal'}</div><div class="wico">${WX.icon}\uFE0F</div>
         <button class="arr l" data-a="w-">◀</button><button class="arr r" data-a="w+">▶</button></div>
     </div>
-    <div class="modes${a(0.3)}">${[['carrera', '🏁', 'CARRERA', ''], ['elim', '☠', 'ELIMINACIÓN', ' el'], ['drift', '🌀', 'DRIFT', ' dr'], ['duo', '👥', 'DE A DOS', ' duo']].map(([k, ic, nm, cl]) => `<button data-a="m-${k}" class="${(SET.mode || 'carrera') === k ? 'on' + cl : ''}"><i>${ic}</i>${nm}</button>`).join('')}</div>
-    <div class="stats ${SET.mode || 'carrera'}${a(0.32)}">${(SET.mode === 'elim' ? [['☠', 'CAE EL <b>ÚLTIMO</b>'], ['⚑', '<b>' + SET.rivals + '</b> RIVALES']]
+    ${!adv ? '' : `<div class="modes${a(0.3)}">${[['carrera', '🏁', 'CARRERA', ''], ['elim', '☠', 'ELIMINACIÓN', ' el'], ['drift', '🌀', 'DRIFT', ' dr'], ['duo', '👥', 'DE A DOS', ' duo']].map(([k, ic, nm, cl]) => `<button data-a="m-${k}" class="${(SET.mode || 'carrera') === k ? 'on' + cl : ''}"><i>${ic}</i>${nm}</button>`).join('')}</div>`}
+    ${!adv ? '' : `<div class="stats ${SET.mode || 'carrera'}${a(0.32)}">${(SET.mode === 'elim' ? [['☠', 'CAE EL <b>ÚLTIMO</b>'], ['⚑', '<b>' + SET.rivals + '</b> RIVALES']]
       : SET.mode === 'duo' ? [['▼', '<b>J1</b> ABAJO'], ['▲', '<b>J2</b> ARRIBA'], ['★', 'A <b>' + DUO_WIN + '</b> PUNTOS']]
       : SET.mode === 'drift' ? [['↻', '<b>' + DR_LAPS + '</b> VUELTAS'], ['∞', 'ENCADENÁ <b>DERRAPES</b>']].concat(drInfo(TRACK_KEY).best ? [['★', '<b>' + drInfo(TRACK_KEY).best.toLocaleString(EN ? 'en-US' : 'es-AR') + '</b>']] : [])
-      : [['↻', '<b>' + SET.laps + '</b> VUELTAS'], ['⚑', '<b>' + SET.rivals + '</b> RIVALES'], ['◆', '<b>' + DIFFS[SET.diff][0].toUpperCase() + '</b>']]).map(([ic, t]) => `<span><i>${ic}</i>${t}</span>`).join('')}</div>
-    <button class="go${a(0.38)}" data-a="go"><span>CORRER ▶</span></button>
-    <div class="row2${a(0.42)}"><button class="sec gold" data-a="champ">🏆 ${prof.champ ? CUPS[prof.champ.cup].name + ' ' + (prof.champ.round + 1) + '/' + CHAMP.length : 'COPAS'}</button><button class="sec" data-a="chal">🎯 DESAFÍOS${(() => { const n = dailyList().filter(d => !d.done).length; return n ? ' <span class="nb">' + n + '</span>' : ''; })()}</button></div>
-    <div class="row3${a(0.46)}"><button class="sec tt" data-a="tt">⏱ CONTRARRELOJ</button><button class="sec" data-a="gar">GARAJE</button><button class="sec ic" data-a="opt">⚙</button></div>
-    ${reqMenuHTML(a(0.48))}
+      : [['↻', '<b>' + SET.laps + '</b> VUELTAS'], ['⚑', '<b>' + SET.rivals + '</b> RIVALES'], ['◆', '<b>' + DIFFS[SET.diff][0].toUpperCase() + '</b>']]).map(([ic, t]) => `<span><i>${ic}</i>${t}</span>`).join('')}</div>`}
+    ${gc ? `<button class="go cupgo${a(0.38)}" data-a="cupgo"><span>${gc.on ? 'SEGUIR COPA ' + CUPS[gc.k].name : 'COPA ' + CUPS[gc.k].name} ▶</span><small>${EN ? 'Race' : 'Carrera'} ${gc.round + 1}/${CUPS[gc.k].races.length} · ${TRACKS[CUPS[gc.k].races[gc.round].track].name}</small></button>`
+         : `<button class="go${a(0.38)}" data-a="go"><span>CORRER ▶</span></button>`}
+    <div class="row2${a(0.42)}">${gc ? '<button class="sec" data-a="go">🏁 CARRERA LIBRE</button>' : ''}<button class="sec gold" data-a="champ">🏆 ${prof.champ ? CUPS[prof.champ.cup].name + ' ' + (prof.champ.round + 1) + '/' + CHAMP.length : 'COPAS'}</button>${gc ? '' : `<button class="sec" data-a="gar">GARAJE</button>`}</div>
+    <div class="row3${a(0.46)}">${lv >= 2 ? `<button class="sec" data-a="chal">🎯 DESAFÍOS${(() => { const n = dailyList().filter(d => !d.done).length; return n ? ' <span class="nb">' + n + '</span>' : ''; })()}</button>` : ''}${lv >= 4 ? '<button class="sec tt" data-a="tt">⏱ RELOJ</button>' : ''}${gc ? '<button class="sec" data-a="gar">GARAJE</button>' : ''}<button class="sec ic" data-a="opt">⚙</button></div>
+    ${lv >= 3 ? reqMenuHTML(a(0.48)) : ''}
     ${prof.lvl >= 3 ? eventMenuHTML(a(0.5)) : `<div class="tip${a(0.5)}"><b>TIP</b><span id="mTip">${TIPS[tipI]}</span></div>`}`;
   mEl.querySelectorAll('[data-a]').forEach(b => b.onclick = ev => {
     ev.stopPropagation(); const act = b.dataset.a;
-    if (act === 'go') { sfxBlip(880, 0.08); endChampRace(); endTT(); endEvent(); mEl.style.display = 'none'; menuShown = false; if (!prof.tut) startTutorial(); else if (SET.mode === 'elim') startElim(); else if (SET.mode === 'duo') startDuo(); else if (SET.mode === 'drift') startDrift(); else { endElim(); endDuo(); endDrift(); resetRace(); startCountdown(); } }
+    if (act === 'cupgo') { initAudio(); sfxBlip(880, 0.08); guideGo(); }
+    else if (act === 'go') { sfxBlip(880, 0.08); endChampRace(); endTT(); endEvent(); mEl.style.display = 'none'; menuShown = false; if (!prof.tut) startTutorial(); else if (SET.mode === 'elim') startElim(); else if (SET.mode === 'duo') startDuo(); else if (SET.mode === 'drift') startDrift(); else { endElim(); endDuo(); endDrift(); resetRace(); startCountdown(); } }
     else if (act.indexOf('m-') === 0) { SET.mode = act.slice(2); saveProf(); sfxBlip(760, 0.05); mRender(false); }
     else if (act === 'req') { initAudio(); sfxBlip(880, 0.08); openReqPanel(); }
     else if (act === 'evt') { initAudio(); sfxBlip(880, 0.08); eventGo(); }
@@ -4809,10 +4836,13 @@ function resRender() {
     ${rpAvailable() ? `<div class="rpb${a(0.38)}"><button data-a="rp">🎬 REPETICIÓN</button><button data-a="clip">📲 GUARDAR CLIP</button></div>` : ''}
     <div class="bt${a(0.4)}">${player.champInfo
       ? (player.champInfo.last ? '<button class="go gold" data-a="final">VER RESULTADO 🏆</button>' : '<button class="go" data-a="next">SIGUIENTE ▶</button>') + '<button class="s" data-a="menu">MENÚ</button>'
-      : '<button class="go" data-a="again">REVANCHA ▶</button><button class="s" data-a="gar">GARAJE</button><button class="s" data-a="menu">MENÚ</button>'}</div>`;
+      : (!eventMode && !reqMode && guideCup() ? `<button class="go" data-a="cup">${guideCup().on ? 'SEGUIR COPA' : 'COPA ' + CUPS[guideCup().k].name} ▶</button><button class="s" data-a="again">REVANCHA</button><button class="s" data-a="menu">MENÚ</button>`
+        : '<button class="go" data-a="again">REVANCHA ▶</button><button class="s" data-a="gar">GARAJE</button><button class="s" data-a="menu">MENÚ</button>')}</div>`;
   resPodium();
+  if (player.xpGain && player.xpGain.ups.length && !player.xpGain.shown) { player.xpGain.shown = true; const ups = player.xpGain.ups; setTimeout(() => { if (resShown) showLevelUp(ups); }, 1700); }
   rEl.querySelectorAll('[data-a]').forEach(b => b.onclick = () => {
     initAudio(); const act = b.dataset.a;
+    if (act === 'cup') { hideRes(); endChampRace(); endEvent(); resetRace(); guideGo(); return; }
     if (act === 'x2') { adsDouble(b); return; }
     if (act === 'rp' || act === 'clip') { startReplay(act === 'clip'); return; }
     hideRes();
@@ -4827,11 +4857,37 @@ function resRender() {
   (function count() { if (!resShown) return; const k = Math.min(1, (performance.now() - t0 - 500)/1100), v = Math.round(target*Math.max(0, 1 - Math.pow(1 - Math.max(0, k), 3)));
     const e = rEl.querySelector('#rEarn'); if (e) e.textContent = '+' + fmtMoney(v); if (k < 1) { if (Math.random() < 0.3) sfxBlip(1200 + Math.random()*400, 0.03); requestAnimationFrame(count); } })();
 }
+// festejo al subir de nivel: pantalla propia con la plata y todo lo que se abrió
+function showLevelUp(ups) {
+  if (!ups || !ups.length) return;
+  const last = ups[ups.length - 1], pay = ups.reduce((a, u) => a + u.pay, 0), opened = [];
+  for (const u of ups) if (u.unlock) for (const t of u.unlock.split(' · ')) opened.push(t);
+  bkEl.innerHTML = `<div class="box" style="text-align:center"><div style="font-size:15px;font-weight:800;letter-spacing:3px;color:#ffd23f">⬆ ${EN ? 'LEVEL UP' : 'SUBISTE DE NIVEL'}</div>
+    <div style="font-size:92px;font-weight:800;font-style:italic;line-height:1;color:#fff;text-shadow:0 0 30px rgba(255,210,63,.7);animation:spIn .5s both">${last.lvl}</div>
+    <div style="font-size:34px;font-weight:800;font-style:italic;color:#3dff8a;margin:4px 0 8px">+${fmtMoney(pay)}</div>
+    ${opened.length ? `<div style="text-align:left;background:rgba(255,255,255,.07);border-radius:10px;padding:10px 12px;margin-bottom:10px"><div style="font-size:12px;font-weight:800;letter-spacing:2px;color:#9aa3ad;margin-bottom:4px">${EN ? 'NOW UNLOCKED' : 'SE ABRIÓ'}</div>${opened.map(t => `<div style="font-size:18px;font-weight:800;padding:2px 0">🔓 ${T(t)}</div>`).join('')}</div>` : ''}
+    <div class="row"><button class="go" data-b="ok">${EN ? 'CONTINUE' : 'SEGUIR'}</button></div></div>`;
+  bkEl.style.display = 'flex'; throwConfetti(true); sfxBoost(0.9);
+  bkEl.querySelector('[data-b=ok]').onclick = () => { bkEl.style.display = 'none'; sfxBlip(1200, 0.08); };
+}
+// copa que conviene correr ahora: la que está en curso o la primera abierta que todavía no ganaste
+function guideCup() {
+  if (prof.champ && CUPS[prof.champ.cup]) return { k: prof.champ.cup, round: prof.champ.round, on: true };
+  for (const k of CUP_KEYS) if (cupUnlocked(k) && (prof.cups[k] || 99) > 1) return { k, round: 0, on: false };
+  return null;
+}
+function guideGo() {
+  const g = guideCup(); if (!g) return false;
+  endTT(); endEvent(); endElim(); endDuo(); endDrift(); try { hideRes(); } catch(e) {}
+  mEl.style.display = 'none'; menuShown = false; state = 'menu'; stateT = 0;
+  if (g.on) { CHAMP = CUPS[g.k].races; champGo(); } else startChampionship(g.k);
+  return true;
+}
 // próxima meta: lo más cercano que podés comprar o desbloquear (tocarla abre el garaje)
 function nextGoalHTML(a) {
   const lines = [], need = c => prof.money >= c.cost ? 'Ya te alcanza para ' + c.name + '.' : 'Te faltan ' + fmtMoney(c.cost - prof.money) + ' para ' + c.name + '.';
   let car = null, up = null;
-  for (const k of MODEL_KEYS) { const m = MODELS[k]; if (prof.owned[k] || (m.lvl && (prof.lvl || 1) < m.lvl)) continue; if (!car || m.price < car.cost) car = { cost: m.price, name: m.name }; }
+  for (const k of MODEL_KEYS) { const m = MODELS[k]; if (prof.owned[k] || clsOf(k) || (m.lvl && (prof.lvl || 1) < m.lvl)) continue; if (!car || m.price < car.cost) car = { cost: m.price, name: m.name }; }
   for (const u of UPGRADES) { const l = prof.upg[u.k] || 0; if (l >= UPG_MAX) continue; const c = upgCost(u, l); if (!up || c < up.cost) up = { cost: c, name: u.name + ' nivel ' + (l + 1) }; }
   if (up) lines.push(need(up)); if (car) lines.push(need(car));
   const nx = Object.keys(LEVEL_UNLOCKS).map(Number).find(l => l > (prof.lvl || 1));
@@ -4870,7 +4926,7 @@ prof.champ = prof.champ || null;
 /* ---------- COPAS: cada una con sus 4 circuitos; las más altas tienen más curvas y rivales más duros ---------- */
 const CUPS = {
   bronce:   { name: 'BRONCE',   col: '#e8a466', col2: '#7a3f14', stars: 1, vm: 0.95,  sk: 0.86, mist: 1.5,  rup: 0, prize: [2500, 1500, 900, 500, 300, 200],
-              races: [{ track: 'autodromo', wx: 'dia' }, { track: 'bahia', wx: 'tarde' }, { track: 'valle', wx: 'dia' }, { track: 'dunas', wx: 'tarde' }] },
+              races: [{ track: 'autodromo', wx: 'dia' }, { track: 'bahia', wx: 'noche' }, { track: 'valle', wx: 'dia' }, { track: 'dunas', wx: 'tarde' }] },
   plata:    { name: 'PLATA',    col: '#eef3f7', col2: '#64748a', stars: 2, vm: 0.985, sk: 1.0,  mist: 1.0,  rup: 2, prize: [4500, 2800, 1700, 900, 500, 300],
               races: [{ track: 'rally', wx: 'dia' }, { track: 'canon', wx: 'tarde' }, { track: 'bosque', wx: 'cambia' }, { track: 'puerto', wx: 'noche' }] },
   oro:      { name: 'ORO',      col: '#ffe36b', col2: '#a86f00', stars: 3, vm: 1.02,  sk: 1.05, mist: 0.7,  rup: 3, prize: [7500, 4500, 2800, 1500, 800, 500],
@@ -4920,7 +4976,7 @@ function champStandings() {
 function resetChampRace() {
   LAPS = Math.max(1, C.vueltas|0);
   const ps = playerStats(), pp = (ps.vmax - 1)*0.6 + (ps.grip - 1)*0.5 + (ps.acc - 1)*0.2;
-  const hab = C.habilidadRivales*(1 + Math.min(0.12, Math.max(0, pp)*0.5));
+  const hab = (prof.stats.races < 5 ? 0.9 : 1)*C.habilidadRivales*(1 + (CUP_KEYS.indexOf(prof.champ.cup) >= 2 ? Math.min(0.12, Math.max(0, pp)*0.5) : 0));
   const grid = champStandings().reverse();
   cars = [];
   grid.forEach((e, i) => {
@@ -5428,6 +5484,9 @@ prof.lvl = prof.lvl || 1; prof.xp = prof.xp || 0;
 function xpNeed(l) { return 400 + 35*l; }
 const LEVEL_UNLOCKS = { 5: 'Llantas cromadas', 8: 'Humo negro', 10: 'Auto Drift JDM', 12: 'Vinilo tribal', 15: 'Neón dorado', 20: 'Humo de fuego',
   25: 'Auto Hiper V12', 30: 'Vinilo de oro', 40: 'Llantas de oro rosa', 50: 'Vinilo LEYENDA' };
+(function () { const add = (l, t) => { LEVEL_UNLOCKS[l] = LEVEL_UNLOCKS[l] ? t + ' · ' + LEVEL_UNLOCKS[l] : t; };
+  for (const k of MODEL_KEYS) { const m = MODELS[k]; if (m.lvl && k !== 'jdm' && k !== 'hiper') add(m.lvl, m.name); }
+  add(2, 'Desafíos diarios'); add(3, 'Modos, eventos y licencias'); add(4, 'Contrarreloj'); })();
 function addXP(n) {
   n = Math.round(n); const ups = [];
   if (prof.lvl >= LVL_MAX) return { n, ups };
@@ -7126,15 +7185,15 @@ const tutSkipEl = document.createElement('div'); tutSkipEl.id = 'tutSkip'; tutSk
 })();
 function startTutorial() {
   endChampRace(); endTT(); endElim(); hidePanel(); mEl.style.display = 'none'; menuShown = false;
-  applySettings(); applyWeather('dia'); C.rivales = 3; C.posicionLargada = 4; C.habilidadRivales *= 0.9;
+  applySettings(); applyWeather('dia'); C.rivales = 3; C.posicionLargada = 3; C.habilidadRivales *= 0.7;
   resetRace(); LAPS = 2; startCountdown(); countdown = Math.max(countdown, 3.4);
   tut = { step: 0, t: 0, held: 0, slow: false };
   tutSkipEl.style.left = Math.round((innerWidth - W)/2) + 'px'; tutSkipEl.style.width = W + 'px'; tutSkipEl.style.display = 'block';
 }
 function endTutorial(skipped) {
   if (!tut) return;
-  tut = null; tutSkipEl.style.display = 'none'; prof.tut = true; saveProf();
-  if (skipped) { applySettings(); resetRace(); state = 'menu'; stateT = 0; }
+  tut = null; tutSkipEl.style.display = 'none'; prof.tut = true; saveProf(); applySettings();
+  if (skipped) { resetRace(); state = 'menu'; stateT = 0; }
 }
 function tutTick(dt) {
   if (!tut) return 1;
@@ -7143,26 +7202,25 @@ function tutTick(dt) {
   if (state !== 'race' && state !== 'countdown') return 1;
   const held = isHeld();
   if (T.step === 0) { if (state === 'race') { T.held = held ? T.held + dt : 0; if (T.held > 0.8 || raceTime > 3) { T.step = 1; T.t = 0; } } }
-  else if (T.step === 1) { if (T.t > 3.2) { T.step = 2; T.t = 0; } }
+  else if (T.step === 1) { T.step = 2; T.t = 0; }
   else if (T.step === 2) { if (warn && held) { T.step = 3; T.t = 0; } }
   else if (T.step === 3) { T.slow = held; if (!held || T.t > 6) { T.slow = false; T.step = 4; T.t = 0; } }
   else if (T.step === 4) { if (T.t > 2.2) { T.step = 5; T.t = 0; } }
   else if (T.step === 5) { if (player.skid > 0.45 || T.t > 10) { T.step = 6; T.t = 0; } }
   else if (T.step === 6) { if (T.t > 2.6) { T.step = 7; T.t = 0; } }
-  else if (T.step === 7) { if (T.t > 4.5) { T.step = 8; T.t = 0; } }
-  else if (T.step === 8) { if (T.t > 3) { T.step = 9; } }
+  else if (T.step === 7) { T.step = 9; }
   return T.slow ? 0.22 : 1;
 }
 const TUT_CARDS = [
-  ['👆 MANTENÉ EL DEDO', 'Mantené apretada la pantalla para acelerar. Si apretás justo antes del verde, salís con TURBO.'],
-  ['EL AUTO DOBLA SOLO', 'Vos solo decidís cuándo acelerar y cuándo soltar.'],
+  ['👆 MANTENÉ EL DEDO', 'Dejá el dedo apretado para acelerar. El auto dobla solo.'],
+  null,
   null,
   ['✋ ¡SOLTÁ AHORA!', 'Cuando aparece el aviso ¡SOLTÁ!, levantá el dedo para frenar antes de la curva.'],
   ['¡ESO!', 'Volvé a acelerar en la curva y salí rápido.'],
   null,
   ['🔥 ¡DRIFT!', 'Derrapar en las curvas suma plata al final de la carrera.'],
-  ['⏪ ¿QUEDASTE TRABADO?', 'Mantené apretado el botón R (abajo a la izquierda) para ir marcha atrás.'],
-  ['🏁 ¡A GANAR!', 'Pasá autos y terminá la carrera. ¡Suerte, piloto!']
+  null,
+  null
 ];
 function drawTutorial() {
   if (!tut || (state !== 'race' && state !== 'countdown')) return;
@@ -7545,7 +7603,7 @@ const skEl = document.createElement('div'); skEl.id = 'introSkip'; skEl.innerHTM
 (function () { const st = document.createElement('style'); st.textContent = ICSS; document.head.appendChild(st); document.body.appendChild(spEl); document.body.appendChild(skEl);
   for (const e of [spEl, skEl]) ['pointerdown', 'touchstart'].forEach(ev => e.addEventListener(ev, x => x.stopPropagation(), { passive: true }));
   spEl.addEventListener('click', () => { initAudio(); introMark(); if (!prof.tut) { spEl.style.display = 'none'; introPhase = null; startTutorial(); }   // la primera vez: directo a manejar
-    else if (SET.intro !== false) startIntro(); else { spEl.style.display = 'none'; introPhase = null; } });
+    else if (SET.intro !== false && !prof.introSeen) { prof.introSeen = 1; saveProf(); startIntro(); } else { spEl.style.display = 'none'; introPhase = null; } });
   skEl.addEventListener('click', () => { if (introPhase === 'play' && introT > 0.6) endIntro(true); });
 })();
 function placeOv(e) { e.style.left = Math.round((innerWidth - W)/2) + 'px'; e.style.width = W + 'px'; }
