@@ -15,7 +15,7 @@
 </style>
 </head>
 <body>
-<div id="ld" style="display:none"><div class="lb"><small>CARGANDO</small><b id="ldN"></b><i><span></span></i></div></div>
+<div id="ld" style="display:none"><div class="lb"><small id="ldT">CARGANDO</small><b id="ldN"></b><i><span></span></i></div></div>
 <style>
 #ld{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:radial-gradient(90% 60% at 50% 45%,#161b24,#07090c 80%);
   font-family:"Barlow Condensed","Arial Narrow",sans-serif;color:#fff;transition:opacity .35s}
@@ -26,7 +26,7 @@
 #ld i span{display:block;width:40%;height:100%;background:#e1251b;border-radius:3px;animation:ldBar 1s ease-in-out infinite}
 @keyframes ldBar{0%{transform:translateX(-110%)}100%{transform:translateX(280%)}}
 </style>
-<script>try { const n = sessionStorage.getItem('driftloop_ld'); if (n) { document.getElementById('ldN').textContent = n; document.getElementById('ld').style.display = 'flex'; } } catch(e) {}</script>
+<script>try { const n = sessionStorage.getItem('driftloop_ld'); if (/^en/i.test(navigator.language) && !/"lang":"es"/.test(localStorage.getItem('driftloop_profile') || '') || /"lang":"en"/.test(localStorage.getItem('driftloop_profile') || '')) document.getElementById('ldT').textContent = 'LOADING'; if (n) { document.getElementById('ldN').textContent = n; document.getElementById('ld').style.display = 'flex'; } } catch(e) {}</script>
 <canvas id="c"></canvas>
 <script>
 /* =====================================================================
@@ -148,7 +148,7 @@ const I18N_EN = {
   '⤢ VER': '⤢ VIEW', 'Girá el celular': 'Rotate your phone', 'Drift Loop se juega en vertical': 'Drift Loop is played in portrait',
   // ---- garaje ----
   'CARROCERÍA': 'BODY', 'COLOR': 'COLOR', 'DISEÑO': 'DESIGN', 'FRANJAS': 'STRIPES', 'MODELO': 'MODEL', 'NÚMERO': 'NUMBER', 'MEJORAS': 'UPGRADES',
-  'ESTILO': 'STYLE', 'Dejá el dedo apretado para acelerar. El auto dobla solo.': 'Keep your finger down to speed up. The car steers itself.', 'CARRERA LIBRE': 'FREE RACE', 'SEGUIR': 'CONTINUE', 'TALLER': 'WORKSHOP', 'Las mejoras sirven para todos tus autos. Suben los caballos (CV) y los puntos de rendimiento (PR), que definen la clase del auto: D, C, B, A o S.': 'Upgrades apply to all your cars. They raise horsepower (CV) and performance points (PR), which set the car class: D, C, B, A or S.', 'EN USO': 'IN USE', '✓ EN USO': '✓ IN USE', 'TUYO': 'OWNED', 'USAR ESTE AUTO': 'USE THIS CAR', 'MÁXIMO': 'MAX',
+  'ESTILO': 'STYLE', 'Desafíos diarios': 'Daily challenges', 'Modos, eventos y licencias': 'Modes, events and licenses', 'Contrarreloj': 'Time trial', 'CARGANDO': 'LOADING', 'Dejá el dedo apretado para acelerar. El auto dobla solo.': 'Keep your finger down to speed up. The car steers itself.', 'CARRERA LIBRE': 'FREE RACE', 'SEGUIR': 'CONTINUE', 'TALLER': 'WORKSHOP', 'Las mejoras sirven para todos tus autos. Suben los caballos (CV) y los puntos de rendimiento (PR), que definen la clase del auto: D, C, B, A o S.': 'Upgrades apply to all your cars. They raise horsepower (CV) and performance points (PR), which set the car class: D, C, B, A or S.', 'EN USO': 'IN USE', '✓ EN USO': '✓ IN USE', 'TUYO': 'OWNED', 'USAR ESTE AUTO': 'USE THIS CAR', 'MÁXIMO': 'MAX',
   'VISTA PREVIA · TUYO': 'PREVIEW · OWNED', 'VOLVER': 'BACK', 'CERRAR': 'CLOSE', 'COMPRAR': 'BUY',
   'Comprá con tu plata o desbloqueá con logros. Lo que ya es tuyo se elige con un toque.': 'Buy with your cash or unlock with achievements. Anything you own is one tap away.',
   'Las mejoras sirven para todos tus autos. Los rivales también se van poniendo mejores, así que la carrera sigue pareja.': 'Upgrades apply to all your cars. Rivals keep improving too, so races stay close.',
@@ -4669,10 +4669,10 @@ function mRender(anim) {
       : SET.mode === 'duo' ? [['▼', '<b>J1</b> ABAJO'], ['▲', '<b>J2</b> ARRIBA'], ['★', 'A <b>' + DUO_WIN + '</b> PUNTOS']]
       : SET.mode === 'drift' ? [['↻', '<b>' + DR_LAPS + '</b> VUELTAS'], ['∞', 'ENCADENÁ <b>DERRAPES</b>']].concat(drInfo(TRACK_KEY).best ? [['★', '<b>' + drInfo(TRACK_KEY).best.toLocaleString(EN ? 'en-US' : 'es-AR') + '</b>']] : [])
       : [['↻', '<b>' + SET.laps + '</b> VUELTAS'], ['⚑', '<b>' + SET.rivals + '</b> RIVALES'], ['◆', '<b>' + DIFFS[SET.diff][0].toUpperCase() + '</b>']]).map(([ic, t]) => `<span><i>${ic}</i>${t}</span>`).join('')}</div>`}
-    ${gc ? `<button class="go cupgo${a(0.38)}" data-a="cupgo"><span>${gc.on ? 'SEGUIR COPA ' + CUPS[gc.k].name : 'COPA ' + CUPS[gc.k].name} ▶</span><small>${EN ? 'Race' : 'Carrera'} ${gc.round + 1}/${CUPS[gc.k].races.length} · ${TRACKS[CUPS[gc.k].races[gc.round].track].name}</small></button>`
+    ${gc ? `<button class="go cupgo${a(0.38)}" data-a="cupgo"><span>${cupLabel(gc)} ▶</span><small>${EN ? 'Race' : 'Carrera'} ${gc.round + 1}/${CUPS[gc.k].races.length} · ${TRACKS[CUPS[gc.k].races[gc.round].track].name}</small></button>`
          : `<button class="go${a(0.38)}" data-a="go"><span>CORRER ▶</span></button>`}
     <div class="row2${a(0.42)}">${gc ? '<button class="sec" data-a="go">🏁 CARRERA LIBRE</button>' : ''}<button class="sec gold" data-a="champ">🏆 ${prof.champ ? CUPS[prof.champ.cup].name + ' ' + (prof.champ.round + 1) + '/' + CHAMP.length : 'COPAS'}</button>${gc ? '' : `<button class="sec" data-a="gar">GARAJE</button>`}</div>
-    <div class="row3${a(0.46)}">${lv >= 2 ? `<button class="sec" data-a="chal">🎯 DESAFÍOS${(() => { const n = dailyList().filter(d => !d.done).length; return n ? ' <span class="nb">' + n + '</span>' : ''; })()}</button>` : ''}${lv >= 4 ? '<button class="sec tt" data-a="tt">⏱ RELOJ</button>' : ''}${gc ? '<button class="sec" data-a="gar">GARAJE</button>' : ''}<button class="sec ic" data-a="opt">⚙</button></div>
+    <div class="row3${a(0.46)}">${lv >= 2 ? `<button class="sec" data-a="chal">🎯 DESAFÍOS${(() => { const n = dailyList().filter(d => !d.done).length; return n ? ' <span class="nb">' + n + '</span>' : ''; })()}</button>` : ''}${lv >= 4 ? '<button class="sec tt" data-a="tt">⏱ ' + (EN ? 'TIME' : 'RELOJ') + '</button>' : ''}${gc ? '<button class="sec" data-a="gar">GARAJE</button>' : ''}<button class="sec ic" data-a="opt">⚙</button></div>
     ${lv >= 3 ? reqMenuHTML(a(0.48)) : ''}
     ${prof.lvl >= 3 ? eventMenuHTML(a(0.5)) : `<div class="tip${a(0.5)}"><b>TIP</b><span id="mTip">${TIPS[tipI]}</span></div>`}`;
   mEl.querySelectorAll('[data-a]').forEach(b => b.onclick = ev => {
@@ -4851,7 +4851,7 @@ function resRender() {
     ${rpAvailable() ? `<div class="rpb${a(0.38)}"><button data-a="rp">🎬 REPETICIÓN</button><button data-a="clip">📲 GUARDAR CLIP</button></div>` : ''}
     <div class="bt${a(0.4)}">${player.champInfo
       ? (player.champInfo.last ? '<button class="go gold" data-a="final">VER RESULTADO 🏆</button>' : '<button class="go" data-a="next">SIGUIENTE ▶</button>') + '<button class="s" data-a="menu">MENÚ</button>'
-      : (!eventMode && !reqMode && guideCup() ? `<button class="go cupb" data-a="cup"><span>${guideCup().on ? (EN ? 'NEXT RACE' : 'SIGUIENTE') : 'COPA ' + CUPS[guideCup().k].name} ▶</span></button><button class="s" data-a="again">REVANCHA</button><button class="s" data-a="menu">MENÚ</button>`
+      : (!eventMode && !reqMode && guideCup() ? `<button class="go cupb" data-a="cup"><span>${guideCup().on ? (EN ? 'NEXT RACE' : 'SIGUIENTE') : cupLabel(guideCup())} ▶</span></button><button class="s" data-a="again">REVANCHA</button><button class="s" data-a="menu">MENÚ</button>`
         : '<button class="go" data-a="again">REVANCHA ▶</button><button class="s" data-a="gar">GARAJE</button><button class="s" data-a="menu">MENÚ</button>')}</div>`;
   resPodium();
   if (player.xpGain && player.xpGain.ups.length && !player.xpGain.shown) { player.xpGain.shown = true; const ups = player.xpGain.ups; setTimeout(() => { if (resShown) showLevelUp(ups); }, 1700); }
@@ -4891,6 +4891,7 @@ function guideCup() {
   for (const k of CUP_KEYS) if (cupUnlocked(k) && (prof.cups[k] || 99) > 1) return { k, round: 0, on: false };
   return null;
 }
+function cupLabel(g) { const n = CUPS[g.k].name; return EN ? (g.on ? 'CONTINUE ' : '') + n + ' CUP' : (g.on ? 'SEGUIR COPA ' : 'COPA ') + n; }
 function guideGo() {
   const g = guideCup(); if (!g) return false;
   endTT(); endEvent(); endElim(); endDuo(); endDrift(); try { hideRes(); } catch(e) {}
