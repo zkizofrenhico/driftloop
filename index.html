@@ -677,17 +677,20 @@ function fxDown() { if (FXL <= 1) return false; FXL--; try { localStorage.setIte
 // ---- brillo: lo más claro de la imagen se difumina y se suma encima ----
 let bloomC = null, bloomG = null;
 const BLOOM_OK = (function () { try { const g = document.createElement('canvas').getContext('2d'); return 'filter' in g; } catch(e) { return false; } })();
+let bloomS = null, bloomSG = null;
 function drawBloom() {
-  if (FXL < 3 || !BLOOM_OK) return;
+  if (FXL < 3) return;
   const k = WX.night ? 0.26 : WX.dusk ? 0.14 : THEME.lava ? 0.12 : 0;   // de día solo brilla la lava
   if (!k) return;
-  const bw = Math.max(1, Math.ceil(cv.width/5)), bh = Math.max(1, Math.ceil(cv.height/5));
-  if (!bloomC || bloomC.width !== bw || bloomC.height !== bh) { bloomC = mkCanvas(bw, bh); bloomG = bloomC.getContext('2d'); }
-  bloomG.globalCompositeOperation = 'copy';
-  bloomG.filter = `brightness(${WX.night ? 0.6 : 0.7}) contrast(${WX.night ? 7 : 5}) saturate(1.4) blur(${Math.max(2, bw/90).toFixed(1)}px)`;
-  bloomG.drawImage(cv, 0, 0, bw, bh); bloomG.filter = 'none';
-  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = k;
-  ctx.drawImage(bloomC, 0, 0, cv.width, cv.height); ctx.restore();
+  // sin "filter" del lienzo (en muchos celulares es lentísimo y era lo que trababa de noche):
+  // se achica la imagen, se multiplica por sí misma para quedarse con lo más brillante y se agranda (eso solo ya la difumina)
+  const bw = Math.max(1, Math.ceil(cv.width/8)), bh = Math.max(1, Math.ceil(cv.height/8)), sw = Math.max(1, bw >> 1), sh = Math.max(1, bh >> 1);
+  if (!bloomC || bloomC.width !== bw || bloomC.height !== bh) { bloomC = mkCanvas(bw, bh); bloomG = bloomC.getContext('2d'); bloomS = mkCanvas(sw, sh); bloomSG = bloomS.getContext('2d'); }
+  bloomG.globalCompositeOperation = 'copy'; bloomG.globalAlpha = 1; bloomG.imageSmoothingEnabled = true; bloomG.drawImage(cv, 0, 0, bw, bh);
+  bloomSG.globalCompositeOperation = 'copy'; bloomSG.imageSmoothingEnabled = true; bloomSG.drawImage(bloomC, 0, 0, sw, sh);
+  bloomSG.globalCompositeOperation = 'multiply'; bloomSG.drawImage(bloomC, 0, 0, sw, sh); bloomSG.drawImage(bloomC, 0, 0, sw, sh);
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = Math.min(1, k*(WX.night ? 2.6 : 2.2)); ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(bloomS, 0, 0, cv.width, cv.height); ctx.restore();
 }
 // ---- reflejo del sol en la carrocería (se mueve cuando el auto gira) ----
 const sheenMask = {}; let sheenTmp = null, sheenG = null;
@@ -3551,37 +3554,34 @@ function render() {
 }
 
 /* ---------- Noche: capa de oscuridad con "agujeros" de luz (faros y torres) ---------- */
-let lcv = null, lctx = null;
+let lcv = null, lctx = null, holeSpr = null, coneSpr = null;
+// "agujeros" de luz ya dibujados una sola vez: en cada cuadro solo se pegan (antes se armaba un degradé por farol y por auto)
+function nightSprites() {
+  holeSpr = mkCanvas(128, 128); let g = holeSpr.getContext('2d');
+  let gr = g.createRadialGradient(64, 64, 2, 64, 64, 64); gr.addColorStop(0, 'rgba(0,0,0,.8)'); gr.addColorStop(0.5, 'rgba(0,0,0,.5)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  const hy = Math.ceil(160*Math.sin(0.42)) + 1; coneSpr = mkCanvas(160, hy*2); g = coneSpr.getContext('2d');
+  gr = g.createRadialGradient(0, hy, 0, 0, hy, 160); gr.addColorStop(0, 'rgba(0,0,0,.97)'); gr.addColorStop(0.3, 'rgba(0,0,0,.85)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = gr; g.beginPath(); g.moveTo(0, hy); g.arc(0, hy, 160, -0.42, 0.42); g.closePath(); g.fill();
+}
 function drawNight(R) {
-  const ls = 0.5, w = Math.ceil(cv.width*ls), hh = Math.ceil(cv.height*ls);
+  if (!holeSpr) nightSprites();
+  const ls = QUAL >= 1 ? 0.2 : 0.25, w = Math.ceil(cv.width*ls), hh = Math.ceil(cv.height*ls);   // la oscuridad es suave: alcanza con un lienzo chico
   if (!lcv || lcv.width !== w || lcv.height !== hh) { lcv = mkCanvas(w, hh); lctx = lcv.getContext('2d'); }
   const L = lctx, m = viewM;
-  L.setTransform(1, 0, 0, 1, 0, 0); L.globalCompositeOperation = 'source-over';
-  L.clearRect(0, 0, w, hh); L.fillStyle = WX.wet ? 'rgba(3,6,16,.88)' : 'rgba(5,9,26,.84)'; L.fillRect(0, 0, w, hh);
-  L.globalCompositeOperation = 'destination-out';
+  L.setTransform(1, 0, 0, 1, 0, 0); L.globalCompositeOperation = 'copy'; L.globalAlpha = 1;
+  L.fillStyle = WX.wet ? 'rgba(3,6,16,.88)' : 'rgba(5,9,26,.84)'; L.fillRect(0, 0, w, hh);
+  L.globalCompositeOperation = 'destination-out'; L.imageSmoothingEnabled = true;
   L.setTransform(m.a*ls, m.b*ls, m.c*ls, m.d*ls, m.e*ls, m.f*ls);
-  for (const lp of lamps) {
-    if (!nearCam(lp.cx, lp.cy, R + 300)) continue;
-    const gr = L.createRadialGradient(lp.cx, lp.cy, 10, lp.cx, lp.cy, 280);
-    gr.addColorStop(0, 'rgba(0,0,0,.8)'); gr.addColorStop(0.5, 'rgba(0,0,0,.5)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
-    L.fillStyle = gr; L.fillRect(lp.cx - 280, lp.cy - 280, 560, 560);
-  }
-  for (const lv of lavas) {
-    if (!nearCam(lv.x, lv.y, R + 300)) continue;
-    const gr = L.createRadialGradient(lv.x, lv.y, lv.r*0.3, lv.x, lv.y, lv.r*2.6);
-    gr.addColorStop(0, 'rgba(0,0,0,.95)'); gr.addColorStop(0.45, 'rgba(0,0,0,.55)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
-    L.fillStyle = gr; L.fillRect(lv.x - lv.r*2.6, lv.y - lv.r*2.6, lv.r*5.2, lv.r*5.2);
-  }
+  for (const lp of lamps) { if (nearCam(lp.cx, lp.cy, R + 300)) L.drawImage(holeSpr, lp.cx - 280, lp.cy - 280, 560, 560); }
+  for (const lv of lavas) { if (nearCam(lv.x, lv.y, R + 300)) { const r = lv.r*2.6; L.drawImage(holeSpr, lv.x - r, lv.y - r, r*2, r*2); L.globalAlpha = 0.5; L.drawImage(holeSpr, lv.x - r*0.6, lv.y - r*0.6, r*1.2, r*1.2); L.globalAlpha = 1; } }
+  const ch = 330*Math.sin(0.42);
   for (const c of cars) {
     if (!nearCam(c.wx, c.wy, R + 340)) continue;
-    const fx = Math.cos(c.va), fy = Math.sin(c.va), half = c.co + c.cr, frx = c.wx + fx*half, fry = c.wy + fy*half;
-    const gr = L.createRadialGradient(frx, fry, 0, frx, fry, 330);
-    gr.addColorStop(0, 'rgba(0,0,0,.97)'); gr.addColorStop(0.3, 'rgba(0,0,0,.85)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
-    L.fillStyle = gr; L.beginPath(); L.moveTo(frx, fry); L.arc(frx, fry, 330, c.va - 0.42, c.va + 0.42); L.closePath(); L.fill();
-    if (c.isPlayer && prof.style.neon !== 'no') { const gn = L.createRadialGradient(c.wx, c.wy, 0, c.wx, c.wy, 70); gn.addColorStop(0, 'rgba(0,0,0,.85)'); gn.addColorStop(1, 'rgba(0,0,0,0)'); L.fillStyle = gn; L.fillRect(c.wx - 70, c.wy - 70, 140, 140); }
-    const ga = L.createRadialGradient(c.wx, c.wy, 0, c.wx, c.wy, 48);
-    ga.addColorStop(0, 'rgba(0,0,0,.6)'); ga.addColorStop(1, 'rgba(0,0,0,0)');
-    L.fillStyle = ga; L.fillRect(c.wx - 48, c.wy - 48, 96, 96);
+    const fx = Math.cos(c.va), fy = Math.sin(c.va), half = c.co + c.cr;
+    L.save(); L.translate(c.wx + fx*half, c.wy + fy*half); L.rotate(c.va); L.drawImage(coneSpr, 0, -ch, 330, ch*2); L.restore();
+    if (c.isPlayer && prof.style.neon !== 'no') L.drawImage(holeSpr, c.wx - 70, c.wy - 70, 140, 140);
+    L.globalAlpha = 0.75; L.drawImage(holeSpr, c.wx - 48, c.wy - 48, 96, 96); L.globalAlpha = 1;
   }
   L.globalCompositeOperation = 'source-over';
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(lcv, 0, 0, cv.width, cv.height);
@@ -3597,14 +3597,14 @@ function drawNight(R) {
   for (const lp of lamps) {
     if (!nearCam(lp.hx, lp.hy, R + 300)) continue;
     ctx.globalAlpha = 0.95; ctx.drawImage(puffGlowWarm, lp.hx - 26, lp.hy - 26, 52, 52);
-    ctx.globalAlpha = WX.wet ? 0.16 : 0.1; ctx.drawImage(puffGlowWarm, lp.cx - 230, lp.cy - 230, 460, 460);
+    if (FXL >= 3 && QUAL === 0) { ctx.globalAlpha = WX.wet ? 0.16 : 0.1; ctx.drawImage(puffGlowWarm, lp.cx - 230, lp.cy - 230, 460, 460); }
   }
   for (const c of cars) {
     if (!nearCam(c.wx, c.wy, R + 200)) continue;
     const fx = Math.cos(c.va), fy = Math.sin(c.va), nx = -fy, ny = fx, half = c.co + c.cr, sd = c.cr - 3;
     ctx.globalAlpha = 0.9;
     for (const s of [-1, 1]) ctx.drawImage(puffGlowWarm, c.wx + fx*(half - 1) + nx*sd*s - 9, c.wy + fy*(half - 1) + ny*sd*s - 9, 18, 18);
-    ctx.globalAlpha = 0.13; ctx.drawImage(puffGlowWarm, c.wx + fx*130 - 120, c.wy + fy*130 - 120, 240, 240);
+    if (c.isPlayer || (FXL >= 3 && QUAL === 0)) { ctx.globalAlpha = 0.13; ctx.drawImage(puffGlowWarm, c.wx + fx*130 - 120, c.wy + fy*130 - 120, 240, 240); }
     const brake = (state === 'race' || state === 'finish') && !c.throttle && c.v > 20, ts = brake ? 30 : 16;
     ctx.globalAlpha = brake ? 0.95 : 0.7;
     for (const s of [-1, 1]) ctx.drawImage(puffGlowRed, c.wx - fx*half + nx*sd*s - ts/2, c.wy - fy*half + ny*sd*s - ts/2, ts, ts);
