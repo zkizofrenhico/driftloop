@@ -1,10 +1,12 @@
 # Arma la app de Android en los servidores de GitHub y la publica para descargarla desde el celular:
 # https://github.com/zkizofrenhico/driftloop/releases/download/app/DriftLoop.apk
+# Las ramas prueba/** arman un instalador aparte, sin tocar el de arriba:
+# https://github.com/zkizofrenhico/driftloop/releases/download/app-prueba/DriftLoop-prueba.apk
 name: App Android
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'prueba/**']
     paths: ['index.html', 'app/**', '.github/workflows/android.yml']
   workflow_dispatch:
 
@@ -12,12 +14,15 @@ permissions:
   contents: write
 
 concurrency:
-  group: android
+  group: android-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      UPLOAD_PASS: ${{ secrets.DRIFTLOOP_UPLOAD_PASS }}
+      UPLOAD_KEYSTORE: ${{ secrets.DRIFTLOOP_UPLOAD_KEYSTORE }}
     steps:
       - uses: actions/checkout@v5
 
@@ -48,10 +53,29 @@ jobs:
           ./gradlew assembleDebug --no-daemon
           cp app/build/outputs/apk/debug/app-debug.apk ../../DriftLoop.apk
 
+      # Versión para subir a Google Play (.aab firmado). Solo corre si están cargados los secretos
+      # DRIFTLOOP_UPLOAD_KEYSTORE (la llave en base64) y DRIFTLOOP_UPLOAD_PASS. La llave nunca va al repositorio.
+      - name: Armar la versión para Google Play
+        if: env.UPLOAD_PASS != '' && env.UPLOAD_KEYSTORE != ''
+        working-directory: app/android
+        run: |
+          printf '%s' "$UPLOAD_KEYSTORE" | base64 -d > upload.keystore
+          DRIFTLOOP_UPLOAD_PASS="$UPLOAD_PASS" ./gradlew bundleRelease --no-daemon
+          cp app/build/outputs/bundle/release/app-release.aab ../../DriftLoop.aab
+          rm -f upload.keystore
+
       - name: Publicar el APK para descargar
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete app --yes --cleanup-tag || true
-          gh release create app DriftLoop.apk --prerelease --title "Drift Loop — app de Android" \
-            --notes "Instalador de prueba armado automáticamente con la última versión del juego ($(date -u +'%d/%m/%Y %H:%M') UTC). Abrilo desde el celular y aceptá instalar apps desconocidas."
+          if [ "$GITHUB_REF_NAME" = "main" ]; then
+            gh release delete app --yes --cleanup-tag || true
+            gh release create app DriftLoop.apk $( [ -f DriftLoop.aab ] && echo DriftLoop.aab ) --prerelease --target "$GITHUB_SHA" --title "Drift Loop — app de Android" \
+              --notes "Instalador de prueba armado automáticamente con la última versión del juego ($(date -u +'%d/%m/%Y %H:%M') UTC). Abrilo desde el celular y aceptá instalar apps desconocidas."
+          else
+            cp DriftLoop.apk DriftLoop-prueba.apk
+            [ -f DriftLoop.aab ] && cp DriftLoop.aab DriftLoop-prueba.aab
+            gh release delete app-prueba --yes --cleanup-tag || true
+            gh release create app-prueba DriftLoop-prueba.apk $( [ -f DriftLoop-prueba.aab ] && echo DriftLoop-prueba.aab ) --prerelease --target "$GITHUB_SHA" --title "Drift Loop — PRUEBA ($GITHUB_REF_NAME)" \
+              --notes "Instalador de la rama $GITHUB_REF_NAME ($(date -u +'%d/%m/%Y %H:%M') UTC). Se instala encima de la app actual y conserva la partida. Trae anuncios de PRUEBA de Google."
+          fi

@@ -24,12 +24,20 @@ android {
             keyAlias 'driftloop'
             keyPassword 'driftloop'
         }
+        // llave de subida a Google Play: no está en el repo; GitHub la arma desde los secretos DRIFTLOOP_UPLOAD_KEYSTORE y DRIFTLOOP_UPLOAD_PASS
+        upload {
+            storeFile file('../upload.keystore')
+            storePassword System.getenv('DRIFTLOOP_UPLOAD_PASS') ?: ''
+            keyAlias 'upload'
+            keyPassword System.getenv('DRIFTLOOP_UPLOAD_PASS') ?: ''
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.test
         }
         release {
+            if (file('../upload.keystore').exists()) signingConfig signingConfigs.upload
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
