@@ -1891,6 +1891,22 @@ function fmtMoney(n) { return '$ ' + Math.round(n).toLocaleString(EN ? 'en-US' :
 
 /* --------- Sprites de los autos (uno por modelo / color / diseño) --------- */
 const SPR = MAXQ ? 6 : 4;                     // px por unidad de mundo en los sprites
+// silueta de cada auto: punto de la trompa y tramos de un costado (curvas de 6 números o rectas de 2); el otro costado es el espejo
+const CAR_HALF = {
+  gt:     [21.2, [[21.2, 3.2, 20.8, 5.6, 19.6, 6.6], [18.6, 8.8, 15.8, 11.2, 11.5, 11.2], [7.5, 11.2, 4, 10.1, -1, 10.1], [-5, 10.1, -9, 11.4, -14, 11.5], [-18.5, 11.5, -21.4, 10.4, -21.6, 7.2], [-21.9, 4, -21.9, 1.5, -21.9, 0]]],
+  hatch:  [17.6, [[17.6, 4, 17.2, 7, 15.5, 8.6], [14, 10.4, 11, 10.8, 7.5, 10.6], [4, 10.4, 0, 9.8, -4, 9.8], [-8, 9.8, -10, 10.8, -13.5, 10.7], [-17, 10.6, -18.6, 8.6, -18.8, 6], [-19, 3.5, -19, 1.5, -19, 0]]],
+  muscle: [23.6, [[23.6, 4, 23.6, 7, 23.3, 8.9], [23, 10.6, 21, 11.2, 18, 11.2], [12, 11.2, 6, 11, 0, 11], [-6, 11, -12, 12, -17, 12], [-21, 12, -23.4, 11, -23.6, 8.5], [-23.8, 5, -23.8, 2, -23.8, 0]]],
+  proto:  [24, [[24, 1.8, 23, 3, 20.5, 3.6], [18.5, 5, 17, 9, 15.5, 11.6], [14, 12.6, 8, 12.6, 6, 12], [4.5, 10, 2, 8, -2, 8], [-6, 8, -9, 12.4, -12, 12.6], [-16, 12.8, -21.8, 12, -22, 9], [-22.2, 5, -22.2, 2, -22.2, 0]]],
+  jdm:    [22, [[22, 4.5, 21.8, 7.6, 21, 8.8], [20.5, 9.6, 19.5, 10, 18.5, 10.2], [17.5, 11.8, 12, 12, 9.5, 11.8], [8.5, 10.6, 7, 10.4, 6, 10.4], [0, 10.4, -5, 10.4, -8, 10.4], [-9, 11.8, -16, 12.2, -18, 12], [-20, 12, -21.8, 11, -22, 9], [-22.2, 5, -22.2, 2, -22.2, 0]]],
+  hiper:  [25, [[24.6, 3.2], [21.5, 6.2], [14, 11.4], [8, 12.4], [-4, 12.2], [-10, 12.8], [-18, 12.6], [-22.4, 10.6], [-23.2, 6], [-23.2, 0]]]
+};
+function halfPath(g, def) {
+  const [x0, segs] = def; let px = x0, py = 0; const pts = [];
+  g.moveTo(x0, 0);
+  for (const sg of segs) { pts.push([px, py, sg]); if (sg.length === 2) g.lineTo(sg[0], sg[1]); else g.bezierCurveTo(sg[0], sg[1], sg[2], sg[3], sg[4], sg[5]); px = sg[sg.length - 2]; py = sg[sg.length - 1]; }
+  for (let i = pts.length - 1; i >= 0; i--) { const [sx, sy, sg] = pts[i]; if (sg.length === 2) g.lineTo(sx, -sy); else g.bezierCurveTo(sg[2], -sg[3], sg[0], -sg[1], sx, -sy); }
+  g.closePath();
+}
 function bodyPathM(g, m) {
   g.beginPath();
   if (m === 'moto') {   // vista de arriba: carenado angosto
@@ -1905,53 +1921,20 @@ function bodyPathM(g, m) {
     g.lineTo(8, 13); g.lineTo(7, 10.5); g.lineTo(-25, 10.5); g.quadraticCurveTo(-27, 10.5, -27, 8.5); g.lineTo(-27, -8.5);
     g.quadraticCurveTo(-27, -10.5, -25, -10.5); g.lineTo(7, -10.5); g.lineTo(8, -13); g.closePath(); return;
   }
-  if (m === 'hatch') {
-    g.moveTo(17, -8); g.quadraticCurveTo(19.2, 0, 17, 8);
-    g.bezierCurveTo(16.5, 10, 12, 10.3, 8, 10.4); g.lineTo(-12, 10.4);
-    g.bezierCurveTo(-16, 10.4, -17.8, 9.5, -18, 7.5); g.lineTo(-18, -7.5);
-    g.bezierCurveTo(-17.8, -9.5, -16, -10.4, -12, -10.4); g.lineTo(8, -10.4);
-    g.bezierCurveTo(12, -10.3, 16.5, -10, 17, -8);
-  } else if (m === 'muscle') {
-    g.moveTo(23, -8.5); g.quadraticCurveTo(24.3, 0, 23, 8.5);
-    g.bezierCurveTo(22, 10.6, 16, 11, 10, 11); g.lineTo(-8, 11);
-    g.bezierCurveTo(-14, 11.9, -21, 11.9, -22.6, 10); g.quadraticCurveTo(-24, 0, -22.6, -10);
-    g.bezierCurveTo(-21, -11.9, -14, -11.9, -8, -11); g.lineTo(10, -11);
-    g.bezierCurveTo(16, -11, 22, -10.6, 23, -8.5);
-  } else if (m === 'proto') {
-    g.moveTo(23, -3); g.quadraticCurveTo(24.6, 0, 23, 3);
-    g.bezierCurveTo(18, 5, 14, 9.5, 8, 11.8); g.lineTo(-14, 12);
-    g.bezierCurveTo(-18, 12, -21, 10, -21.5, 7); g.lineTo(-21.5, -7);
-    g.bezierCurveTo(-21, -10, -18, -12, -14, -12); g.lineTo(8, -11.8);
-    g.bezierCurveTo(14, -9.5, 18, -5, 23, -3);
-  } else if (m === 'jdm') {
-    g.moveTo(21, -8.8); g.quadraticCurveTo(22.4, 0, 21, 8.8); g.lineTo(19.6, 10.2); g.quadraticCurveTo(16, 11.2, 12.5, 11);
-    g.lineTo(6, 10.3); g.lineTo(-10, 10.3); g.quadraticCurveTo(-14, 11.3, -18, 11); g.lineTo(-20.6, 10); g.quadraticCurveTo(-22, 0, -20.6, -10);
-    g.lineTo(-18, -11); g.quadraticCurveTo(-14, -11.3, -10, -10.3); g.lineTo(6, -10.3); g.lineTo(12.5, -11); g.quadraticCurveTo(16, -11.2, 19.6, -10.2);
-  } else if (m === 'hiper') {
-    g.moveTo(23.8, -4.2); g.quadraticCurveTo(25.4, 0, 23.8, 4.2);
-    g.bezierCurveTo(20, 7.5, 15, 11.8, 7, 12.2); g.lineTo(-12, 12.2);
-    g.bezierCurveTo(-18, 12.4, -22.2, 11, -22.8, 8.4); g.lineTo(-22.8, -8.4);
-    g.bezierCurveTo(-22.2, -11, -18, -12.4, -12, -12.2); g.lineTo(7, -12.2);
-    g.bezierCurveTo(15, -11.8, 20, -7.5, 23.8, -4.2);
-  } else {
-    g.moveTo(20.5, -7.5); g.quadraticCurveTo(23.2, 0, 20.5, 7.5);
-    g.bezierCurveTo(19.5, 10.2, 13, 10.8, 8.5, 11); g.bezierCurveTo(3, 10.2, -4, 10.2, -9, 10.6);
-    g.bezierCurveTo(-14, 11.4, -19.5, 11, -21, 9); g.quadraticCurveTo(-22.6, 0, -21, -9);
-    g.bezierCurveTo(-19.5, -11, -14, -11.4, -9, -10.6); g.bezierCurveTo(-4, -10.2, 3, -10.2, 8.5, -11);
-    g.bezierCurveTo(13, -10.8, 19.5, -10.2, 20.5, -7.5);
-  }
+  if (CAR_HALF[m]) { halfPath(g, CAR_HALF[m]); return; }
+  g.moveTo(20.5, -7.5); g.quadraticCurveTo(23.2, 0, 20.5, 7.5); g.bezierCurveTo(19.5, 10.2, 13, 10.8, 8.5, 11); g.bezierCurveTo(3, 10.2, -4, 10.2, -9, 10.6); g.bezierCurveTo(-14, 11.4, -19.5, 11, -21, 9); g.quadraticCurveTo(-22.6, 0, -21, -9); g.bezierCurveTo(-19.5, -11, -14, -11.4, -9, -10.6); g.bezierCurveTo(-4, -10.2, 3, -10.2, 8.5, -11); g.bezierCurveTo(13, -10.8, 19.5, -10.2, 20.5, -7.5);
   g.closePath();
 }
 function hexRGB(h) { const n = parseInt(h.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
 function mul(c, f) { return [Math.min(255, c[0]*f), Math.min(255, c[1]*f), Math.min(255, c[2]*f)]; }
 // Disposición de cada modelo: ruedas, vidrios, techo
 const LAYOUT = {
-  gt:     { fw: [9, 9], rw: [-17, 10], wy: 11, ws: [2, 9.5, 6.4, 8], roof: [-10, 12.5, 8], rear: [-15, -10, 7.4, 6], nose: 20.2, tail: -21.4, hw: 11 },
-  hatch:  { fw: [7, 8], rw: [-15, 8.5], wy: 10.4, ws: [0.5, 7, 6.8, 8], roof: [-12, 12.5, 8.2], rear: [-16.5, -12, 7.6, 7], nose: 17, tail: -18.3, hw: 10.4 },
-  muscle: { fw: [11, 9.5], rw: [-19, 10.5], wy: 11.6, ws: [-1, 6, 6.6, 8], roof: [-12, 11, 8], rear: [-17.5, -12, 7.6, 6.4], nose: 22.8, tail: -23.2, hw: 11.6 },
-  proto:  { fw: [10, 9], rw: [-16, 10.5], wy: 12.3, ws: null, roof: null, rear: null, nose: 23, tail: -21.6, hw: 12 },
-  jdm:    { fw: [9.5, 8.6], rw: [-16.5, 9.6], wy: 10.9, ws: [3, 9.5, 6.4, 7.8], roof: [-9, 11.5, 7.8], rear: [-14.5, -9, 7.4, 6.2], nose: 21.6, tail: -21.4, hw: 10.8 },
-  hiper:  { fw: [10.5, 9.5], rw: [-17.5, 11], wy: 12.4, ws: [0.5, 8.5, 5.8, 8.4], roof: [-9.5, 10, 7], rear: [-16.5, -9.5, 7, 5.2], nose: 24.6, tail: -22.8, hw: 12.1 },
+  gt:     { fw: [9.5, 9], rw: [-17, 10], wy: 11.2, ws: [-1, 5.5, 6.2, 7.8], roof: [-11, 10.4, 7.6], rear: [-16, -11, 7.2, 5.6], nose: 21.2, tail: -21.9, hw: 11.3 },
+  hatch:  { fw: [7.5, 8], rw: [-15, 8.5], wy: 10.5, ws: [1, 7.5, 6.8, 8.2], roof: [-12.5, 13.4, 8.2], rear: [-17.2, -12.5, 7.8, 7.2], nose: 17.6, tail: -19, hw: 10.8 },
+  muscle: { fw: [12, 9.5], rw: [-19.5, 10.5], wy: 11.8, ws: [-2, 5, 6.8, 8.4], roof: [-13, 11, 8.2], rear: [-18.5, -13, 7.8, 6.6], nose: 23.6, tail: -23.8, hw: 12 },
+  proto:  { fw: [10.5, 9], rw: [-16.5, 10.5], wy: 12.6, ws: null, roof: null, rear: null, nose: 24, tail: -22.2, hw: 12.6 },
+  jdm:    { fw: [9.6, 8.6], rw: [-17, 9.6], wy: 11.6, ws: [2.5, 9, 6.6, 8], roof: [-9.5, 12, 8], rear: [-15, -9.5, 7.6, 6.2], nose: 22, tail: -22.2, hw: 12 },
+  hiper:  { fw: [10.5, 9.5], rw: [-18, 11], wy: 12.6, ws: [0, 8.5, 5.4, 8.2], roof: [-8, 8, 6.6], rear: [-15, -8, 6.6, 4.2], nose: 25, tail: -23.2, hw: 12.8 },
   moto: { fw: [9, 7], rw: [-16, 8], wy: 0.2, ws: [0, 1, 1, 1], roof: [-6, 0, 2], rear: [-9, -7, 1, 1], nose: 14, tail: -14, hw: 3.6 },
   formula: { fw: [11.5, 8], rw: [-20.5, 9.5], wy: 12.8, ws: [0, 3, 2, 2.5], roof: [-9, -2, 4], rear: [-12, -9, 3, 3], nose: 24, tail: -22, hw: 9 },
   camion: { fw: [11, 9.5], rw: [-25.5, 15], wy: 12.4, ws: [20.5, 23.8, 10.5, 11.5], roof: [9, 20, 11.5], rear: [5, 7, 10, 10], nose: 25.5, tail: -27, hw: 13 }
@@ -2009,6 +1992,70 @@ function drawNeon(c, night) {
    DIBUJOS PROPIOS de motos, fórmulas y camiones (cada uno con su forma real, no un auto con otra pintura)
    Unidades del mundo, mirando de arriba: +x = trompa, y = costados.
    ===================================================================== */
+/* ---- detalles propios de cada auto: faros, cola, cromados, tomas y alerones ---- */
+function cLight(g, x, y, r, col) { const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.5, col); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+function cChrome(g, a, b) { const gr = g.createLinearGradient(0, a, 0, b); gr.addColorStop(0, '#6c737c'); gr.addColorStop(0.35, '#f4f8fc'); gr.addColorStop(0.55, '#9aa3ad'); gr.addColorStop(1, '#e6ebf0'); return gr; }
+function cRound(g, x, y, r) {   // faro redondo con aro cromado
+  g.fillStyle = cChrome(g, y - r, y + r); g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+  const gr = g.createRadialGradient(x + r*0.2, y - r*0.2, 0, x, y, r*0.8); gr.addColorStop(0, '#ffffff'); gr.addColorStop(0.5, '#fff6cf'); gr.addColorStop(1, '#c9b878');
+  g.fillStyle = gr; g.beginPath(); g.arc(x, y, r*0.76, 0, 7); g.fill();
+}
+function cTail(g, x, y, w, h) { g.fillStyle = '#3a0c0a'; rrG(g, x - 0.3, y - 0.3, w + 0.6, h + 0.6, 0.4); g.fill(); const gr = g.createLinearGradient(x, 0, x + w, 0); gr.addColorStop(0, '#ff5a44'); gr.addColorStop(1, '#a81c14'); g.fillStyle = gr; rrG(g, x, y, w, h, 0.3); g.fill(); }
+function carDetail_gt(g, L, C, A, hw) {   // Gaucho GT: gran turismo clásico de capó largo
+  const hb = g.createLinearGradient(0, -3.4, 0, 3.4); hb.addColorStop(0, 'rgba(0,0,0,.18)'); hb.addColorStop(0.5, 'rgba(255,255,255,.22)'); hb.addColorStop(1, 'rgba(0,0,0,.18)');
+  g.fillStyle = hb; rrG(g, 8, -3.4, 11.5, 6.8, 3); g.fill();                                            // lomo del capó
+  g.fillStyle = 'rgba(0,0,0,.5)'; for (const y of [-1.6, 0.4]) { rrG(g, 12.5, y, 3.4, 1.2, 0.5); g.fill(); }
+  g.fillStyle = cChrome(g, -6, 6); rrG(g, 21, -5.4, 0.9, 10.8, 0.4); g.fill(); rrG(g, -22.6, -7.2, 0.9, 14.4, 0.4); g.fill();   // paragolpes cromados
+  for (const s of [-1, 1]) { cRound(g, 19.8, s*4.3, 1.25); cRound(g, 18.7, s*6.6, 1.15); cTail(g, -22.2, s > 0 ? 5.2 : -7.6, 0.9, 2.4); g.fillStyle = '#ffb347'; g.fillRect(-22.2, s > 0 ? 8 : -9, 0.9, 1); }
+  g.fillStyle = cChrome(g, -0.8, 0.8); g.beginPath(); g.arc(-18.2, 6.4, 0.75, 0, 7); g.fill();   // tapa de nafta
+}
+function carDetail_muscle(g, L, C, A, hw) {   // Bisonte V8: muscle americano
+  g.fillStyle = '#0d0d0f'; rrG(g, 22.6, -9.6, 1.4, 19.2, 0.4); g.fill(); g.strokeStyle = cChrome(g, -9.6, 9.6); g.lineWidth = 0.35; rrG(g, 22.6, -9.6, 1.4, 19.2, 0.4); g.stroke();   // parrilla de lado a lado
+  for (const s of [-1, 1]) for (const y of [5, 7.8]) cRound(g, 23.2, s*y, 1.05);
+  g.fillStyle = cChrome(g, -10, 10); rrG(g, 23.8, -10, 0.8, 20, 0.4); g.fill(); rrG(g, -24.5, -10.4, 0.8, 20.8, 0.4); g.fill();
+  const sc = g.createLinearGradient(9, 0, 18, 0); sc.addColorStop(0, rgba(mul(C, 0.6), 1)); sc.addColorStop(1, rgba(mul(C, 1.15), 1));   // toma de aire grande
+  g.fillStyle = sc; rrG(g, 8.5, -3.4, 9.5, 6.8, 1.6); g.fill(); g.fillStyle = '#060607'; rrG(g, 16.6, -2.6, 1.4, 5.2, 0.5); g.fill(); g.fillStyle = cChrome(g, -2.6, 2.6); g.fillRect(16.8, -0.25, 1, 0.5);
+  g.fillStyle = 'rgba(0,0,0,.35)'; g.beginPath(); g.moveTo(-21.8, -9); g.lineTo(-23.6, -8.4); g.lineTo(-23.6, 8.4); g.lineTo(-21.8, 9); g.closePath(); g.fill();   // cola de pato
+  for (const s of [-1, 1]) { g.fillStyle = cChrome(g, s*12 - 0.5, s*12 + 0.5); rrG(g, -6, s > 0 ? 11.6 : -12.4, 11, 0.8, 0.4); g.fill(); }   // escapes laterales
+  cTail(g, -24, -9.2, 0.9, 18.4); g.fillStyle = 'rgba(0,0,0,.6)'; for (const y of [-3.2, -0.2, 2.8]) g.fillRect(-24, y, 0.9, 0.4);
+}
+function carDetail_hatch(g, L, C, A, hw) {   // Escarabajo Rally: chiquito y redondo
+  for (const s of [-1, 1]) { const fb = g.createRadialGradient(10.5, s*9, 0, 10.5, s*9, 5); fb.addColorStop(0, 'rgba(255,255,255,.2)'); fb.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = fb; g.beginPath(); g.arc(10.5, s*9, 5, 0, 7); g.fill();
+    cRound(g, 15.8, s*7.2, 1.7); cTail(g, -19.1, s > 0 ? 5.6 : -8.2, 0.8, 2.6); }
+  g.fillStyle = '#16171a'; rrG(g, 17.3, -6, 0.9, 12, 0.4); g.fill(); rrG(g, -19.8, -6, 0.9, 12, 0.4); g.fill();
+  g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 0.35; g.beginPath(); g.moveTo(14.6, -5); g.quadraticCurveTo(16.4, 0, 14.6, 5); g.stroke();
+}
+function carDetail_jdm(g, L, C, A, hw) {   // Sushi Turbo: japonés tuneado
+  g.fillStyle = '#121214'; g.beginPath(); g.moveTo(22.6, -9.2); g.lineTo(22.6, 9.2); g.lineTo(21.6, 9.6); g.lineTo(21.6, -9.6); g.closePath(); g.fill();   // labio delantero
+  for (const s of [-1, 1]) {
+    g.fillStyle = '#121214'; g.beginPath(); g.moveTo(21.2, s*9.4); g.lineTo(18.6, s*11.8); g.lineTo(18, s*11.2); g.lineTo(20.4, s*9); g.closePath(); g.fill();   // aletas
+    g.fillStyle = '#e8eef4'; g.beginPath(); g.moveTo(21.2, s*4.4); g.lineTo(20.2, s*8.4); g.lineTo(19.4, s*8.2); g.lineTo(20.4, s*4.4); g.closePath(); g.fill();   // faros finitos
+    g.fillStyle = 'rgba(0,0,0,.35)'; for (const x of [17.2, 13.4, 10.4, -9.2, -12.6, -16.4]) { g.beginPath(); g.arc(x, s*11.3, 0.25, 0, 7); g.fill(); }   // remaches de los guardabarros
+    g.fillStyle = '#111'; g.beginPath(); g.arc(-22.3, s*5.4, 1, 0, 7); g.arc(-22.3, s*8, 1, 0, 7); g.fill(); g.fillStyle = '#e8261b'; g.beginPath(); g.arc(-22.3, s*5.4, 0.7, 0, 7); g.fill(); g.beginPath(); g.arc(-22.3, s*8, 0.7, 0, 7); g.fill();
+  }
+  g.fillStyle = '#e1251b'; g.fillRect(21.6, 3, 1.2, 0.8);                                                // gancho de remolque
+  g.fillStyle = 'rgba(0,0,0,.55)'; for (const y of [-3.6, 1.6]) { rrG(g, 12, y, 5, 2, 0.6); g.fill(); }   // salidas de aire
+  g.fillStyle = rgba(A, 1); g.fillRect(L.ws[1] - 1, -6.6, 0.9, 13.2);                                 // franja del parabrisas
+  g.fillStyle = '#121212'; for (const s of [-1, 1]) g.fillRect(-23, s*4.4 - 0.4, 2.4, 0.8);           // patas del alerón
+  g.fillStyle = '#121212'; rrG(g, -25.2, -11.6, 3, 23.2, 0.8); g.fill(); g.fillStyle = rgba(A, 1); g.fillRect(-25.2, -11.6, 3, 1.4); g.fillRect(-25.2, 10.2, 3, 1.4);
+}
+function carDetail_hiper(g, L, C, A, hw) {   // Toro Furioso V12: cuña filosa
+  g.fillStyle = '#101012'; g.beginPath(); g.moveTo(25.4, -3.4); g.lineTo(25.4, 3.4); g.lineTo(22, 6.6); g.lineTo(21.4, 6); g.lineTo(24.4, 3); g.lineTo(24.4, -3); g.lineTo(21.4, -6); g.lineTo(22, -6.6); g.closePath(); g.fill();   // splitter
+  for (const s of [-1, 1]) {
+    g.strokeStyle = '#f2f6ff'; g.lineWidth = 0.55; g.beginPath(); g.moveTo(22.8, s*4); g.lineTo(20.6, s*6.6); g.moveTo(21.6, s*5.4); g.lineTo(22.4, s*7.4); g.moveTo(21.6, s*5.4); g.lineTo(19.4, s*5.2); g.stroke();   // faros en "Y"
+    g.fillStyle = '#060607'; g.beginPath(); g.moveTo(-3, s*12.2); g.lineTo(-10, s*12.7); g.lineTo(-10, s*9.6); g.closePath(); g.fill();   // tomas laterales
+    g.strokeStyle = '#ff3b2a'; g.lineWidth = 0.6; g.beginPath(); g.moveTo(-23, s*1.6); g.lineTo(-22.6, s*7); g.lineTo(-21, s*9.8); g.stroke();
+  }
+  g.strokeStyle = 'rgba(0,0,0,.65)'; g.lineWidth = 0.5; g.beginPath(); for (let x = -14.4; x < -8.6; x += 1.3) { g.moveTo(x, -4.6); g.lineTo(x, 4.6); } g.stroke();   // persianas del motor
+  g.fillStyle = rgba(mul(C, 0.5), 1); g.fillRect(-21, -0.5, 12, 1);                                     // aleta
+  g.fillStyle = '#0e0e0e'; rrG(g, -25.4, -12.4, 3.4, 24.8, 0.8); g.fill(); g.fillStyle = rgba(A, 1); g.fillRect(-25.4, -0.5, 3.4, 1);
+  g.fillStyle = cChrome(g, -2, 2); for (const y of [-1.6, 0, 1.6]) { g.beginPath(); g.arc(-23.3, y, 0.6, 0, 7); g.fill(); }   // tres escapes al centro
+}
+function carDetail_proto(g, L, C, A, hw) {   // Mosquito LMP: tiras de led y luz de cola de lado a lado
+  for (const s of [-1, 1]) { g.strokeStyle = '#f2f6ff'; g.lineWidth = 0.6; g.beginPath(); g.moveTo(19.6, s*4.6); g.lineTo(17, s*9.4); g.stroke(); cLight(g, 18.4, s*7, 1.4, 'rgba(255,250,220,.6)'); }
+  g.fillStyle = '#ff3b2a'; g.fillRect(-22.5, -8.4, 0.6, 16.8);
+}
+
 const SPECIAL_SPR = (function () {
   const tyre = (g, x, y, l, w, slick) => {
     const gr = g.createLinearGradient(0, y, 0, y + w); gr.addColorStop(0, '#070707'); gr.addColorStop(0.5, '#2e2e31'); gr.addColorStop(1, '#070707');
@@ -2387,33 +2434,22 @@ function makeCarSprite(spec) {
     const rs = g.createLinearGradient(rx, -6, rx + 10, 4); rs.addColorStop(0, 'rgba(255,255,255,.35)'); rs.addColorStop(0.4, 'rgba(255,255,255,0)');
     g.fillStyle = rs; rrG(g, rx, -rh, rl, rh*2, 2.5); g.fill();
     g.fillStyle = rgba(mul(C0, 0.7), 1); g.beginPath(); g.ellipse(L.ws[0] + 2, -hw - 0.4, 1.6, 1, 0, 0, 7); g.ellipse(L.ws[0] + 2, hw + 0.4, 1.6, 1, 0, 0, 7); g.fill();
-    if (m === 'muscle') {  // toma de aire en el capó
-      g.fillStyle = rgba(mul(C0, 0.55), 1); rrG(g, 9, -3, 8, 6, 1.5); g.fill(); g.fillStyle = '#0b0b0b'; g.fillRect(15.5, -2.2, 1.3, 4.4);
-    } else {
-      g.strokeStyle = 'rgba(0,0,0,.45)'; g.lineWidth = 0.6;
-      g.beginPath(); g.moveTo(L.nose - 6, -6.5); g.lineTo(L.nose - 2.5, -6); g.moveTo(L.nose - 6, 6.5); g.lineTo(L.nose - 2.5, 6); g.stroke();
-    }
-    if (m === 'gt') { g.fillStyle = '#141414'; rrG(g, -23, -10.5, 3.2, 21, 0.8); g.fill(); g.fillStyle = rgba(mul(C0, 0.8), 1); g.fillRect(-23, -11, 3.2, 1.6); g.fillRect(-23, 9.4, 3.2, 1.6); }
-    if (m === 'jdm') {   // alerón alto, capó con salidas de aire y ventanas de tela en las luces
-      g.fillStyle = '#121212'; rrG(g, -23.6, -11.5, 3.4, 23, 0.8); g.fill(); g.fillStyle = rgba(A0, 1); g.fillRect(-23.6, -11.5, 3.4, 1.4); g.fillRect(-23.6, 10.1, 3.4, 1.4);
-      g.fillStyle = 'rgba(0,0,0,.55)'; for (const y of [-3.5, 1.5]) rrG(g, 11, y, 5, 2, 0.6), g.fill();
-    }
-    if (m === 'hiper') {  // aleta de tiburón, alerón activo y tomas laterales
-      g.fillStyle = rgba(mul(C0, 0.5), 1); g.fillRect(-21, -0.6, 12, 1.2);
-      g.fillStyle = '#0e0e0e'; rrG(g, -25, -12.5, 3.6, 25, 0.8); g.fill(); g.fillStyle = rgba(A0, 1); g.fillRect(-25, -0.5, 3.6, 1);
-      g.fillStyle = 'rgba(0,0,0,.6)'; rrG(g, -6, -12, 7, 2.2, 1); g.fill(); rrG(g, -6, 9.8, 7, 2.2, 1); g.fill();
-    }
-    if (m === 'hatch') { g.fillStyle = '#141414'; rrG(g, -18.6, -8, 1.8, 16, 0.6); g.fill(); }
+    if (m === 'gt') carDetail_gt(g, L, C0, A0, hw);
+    else if (m === 'muscle') carDetail_muscle(g, L, C0, A0, hw);
+    else if (m === 'hatch') carDetail_hatch(g, L, C0, A0, hw);
+    else if (m === 'jdm') carDetail_jdm(g, L, C0, A0, hw);
+    else if (m === 'hiper') carDetail_hiper(g, L, C0, A0, hw);
   }
   if (m === 'moto') { g.fillStyle = '#fffbe6'; g.beginPath(); g.ellipse(13, 0, 0.9, 1.3, 0, 0, 7); g.fill(); }
-  for (const y of (m === 'formula' || m === 'moto' ? [] : [-6.6, 6.6])) { const hy = y*(m === 'proto' ? 0.55 : m === 'camion' ? 1.45 : 1);
+  if (m === 'proto') carDetail_proto(g, L, C0, A0, hw);
+  for (const y of (m === 'formula' || m === 'moto' || CAR_HALF[m] ? [] : [-6.6, 6.6])) { const hy = y*(m === 'proto' ? 0.55 : m === 'camion' ? 1.45 : 1);
     g.fillStyle = '#1b1d22'; g.beginPath(); g.ellipse(L.nose - 0.5, hy, 1.6, 2.7, 0, 0, 7); g.fill();
     g.fillStyle = '#fffbe6'; g.beginPath(); g.ellipse(L.nose - 0.3, hy, 1.1, 2.2, 0, 0, 7); g.fill();
     g.fillStyle = '#ffffff'; g.beginPath(); g.ellipse(L.nose - 0.1, hy - 0.5, 0.45, 0.9, 0, 0, 7); g.fill(); }
   if (m === 'moto') { g.fillStyle = '#a81c14'; g.fillRect(L.tail + 0.6, -0.9, 1.2, 1.8); bodyPathM(g, m); g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 0.4; g.stroke(); return c; }
-  g.fillStyle = '#3a0c0a'; g.fillRect(L.tail - 0.2, -hw + 2.1, 1.9, 4); g.fillRect(L.tail - 0.2, hw - 6.1, 1.9, 4);
+  if (!CAR_HALF[m]) { g.fillStyle = '#3a0c0a'; g.fillRect(L.tail - 0.2, -hw + 2.1, 1.9, 4); g.fillRect(L.tail - 0.2, hw - 6.1, 1.9, 4);
   g.fillStyle = '#a81c14'; g.fillRect(L.tail, -hw + 2.5, 1.4, 3.2); g.fillRect(L.tail, hw - 5.7, 1.4, 3.2);
-  g.fillStyle = 'rgba(255,150,130,.55)'; g.fillRect(L.tail + 0.2, -hw + 2.8, 0.5, 2.6); g.fillRect(L.tail + 0.2, hw - 5.4, 0.5, 2.6);
+  g.fillStyle = 'rgba(255,150,130,.55)'; g.fillRect(L.tail + 0.2, -hw + 2.8, 0.5, 2.6); g.fillRect(L.tail + 0.2, hw - 5.4, 0.5, 2.6); }
   bodyPathM(g, m); g.strokeStyle = 'rgba(0,0,0,.55)'; g.lineWidth = 0.5; g.stroke();
   if (MODELS[mk].kit === 'rally') {   // equipo de rally: faros extra, barreros, alerón y toma de techo
     const hw = L.hw, nx = L.nose - 3.4;
