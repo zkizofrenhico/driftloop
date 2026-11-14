@@ -92,7 +92,7 @@ const I18N_EN = {
   // ---- copas y dificultad ----
   'BRONCE': 'BRONZE', 'PLATA': 'SILVER', 'ORO': 'GOLD', 'DIAMANTE': 'DIAMOND', 'RUBÍ': 'RUBY', 'ESMERALDA': 'EMERALD', 'OBSIDIANA': 'OBSIDIAN',
   'FÁCIL': 'EASY', 'MEDIA': 'MEDIUM', 'DIFÍCIL': 'HARD', 'EXTREMA': 'EXTREME', 'PRO': 'PRO', 'ÉLITE': 'ELITE', 'INSANA': 'INSANE',
-  'Fácil': 'Easy', 'Normal': 'Normal', 'Difícil': 'Hard', 'Dificultad': 'Difficulty',
+  'Fácil': 'Easy', 'Normal': 'Normal', 'Difícil': 'Hard', 'Dificultad': 'Difficulty', 'Experto': 'Expert', 'En las copas no se usa: cada copa tiene la suya': 'Not used in cups: each cup has its own', 'Carrera libre y modos. Las copas tienen la suya': 'Free race and modes. Cups have their own',
   // ---- logros ----
   'Primera victoria': 'First win', 'Salida perfecta': 'Perfect start', 'Rey del drift': 'Drift King', 'Bajo la lluvia': 'Singing in the rain',
   'Noctámbulo': 'Night owl', 'Desde el fondo': 'From the back', 'Carrera limpia': 'Clean race', 'Todoterreno': 'Off-roader', 'Turista': 'Tourist',
@@ -2983,6 +2983,9 @@ function showcaseWx() {
     if (WX_KEY !== k) { const wet = WX.wet; applyWeather(k); rainDrops.length = 0; if (WX.wet !== wet) clearTiles(); }
   } catch(e) {}
 }
+// carrera mixta: rivales de todas las categorías (un poco de cada una)
+function mixModels() { const cats = {}; for (const k of MODEL_KEYS) { const c = catOf(k); (cats[c] = cats[c] || []).push(k); }
+  const l = []; for (const c in cats) for (const k of cats[c]) for (let i = 0; i < Math.round(6/cats[c].length); i++) l.push(k); return l; }   // cada categoría sale igual de seguido
 function resetRace() {
   showcaseWx();
   if (ttMode) C.rivales = 0;
@@ -2994,10 +2997,11 @@ function resetRace() {
   const pal = shuffle(RIVAL_COLORS), names = shuffle(NAMES);
   // los rivales se ponen un poco mejores con tu auto/mejoras y con tus victorias (la carrera sigue pareja)
   const ps = playerStats(), pp = (ps.vmax - 1)*0.6 + (ps.grip - 1)*0.5 + (ps.acc - 1)*0.2;
-  const adapt = ((prof.cups || {}).plata || 99) <= 3 ? 1 : 0;   // al principio las mejoras se sienten enteras
+  const S = (() => { try { return SET; } catch(e) { return {}; } })(), dMist = S.diff === 'experto' ? 0.3 : S.diff === 'dificil' ? 0.5 : S.diff === 'normal' ? 0.75 : 1;   // al abrir el juego SET todavía no existe
+  const adapt = ((prof.cups || {}).plata || 99) <= 3 || S.diff === 'dificil' || S.diff === 'experto' ? 1 : 0;   // al principio las mejoras se sienten enteras (salvo en Difícil/Experto)
   const ease = prof.stats && prof.stats.races < 5 ? 0.9 : 1;   // primeras carreras: rivales más tranquilos
   const hab = ease*C.habilidadRivales*(1 + adapt*(Math.min(0.12, Math.max(0, pp)*0.5) + Math.min(0.05, rec.wins*0.005)));
-  const AI_MODELS = reqMode ? reqAIModels() : MODELS[prof.model].truck ? ['camion', 'camion', 'camionx'] : MODELS[prof.model].formula || MODELS[prof.model].moto ? [prof.model] : ['gt', 'gt', 'hatch', 'muscle'];
+  const AI_MODELS = reqMode ? reqAIModels() : S.mode === 'mixta' && !eventMode ? mixModels() : MODELS[prof.model].truck ? ['camion', 'camion', 'camionx'] : MODELS[prof.model].formula || MODELS[prof.model].moto ? [prof.model] : ['gt', 'gt', 'hatch', 'muscle'];
   cars = []; let ai = 0;
   for (let i = 0; i < n; i++) {
     const isP = i === pslot, c = makeCar(isP);
@@ -3007,7 +3011,7 @@ function resetRace() {
       const mk = AI_MODELS[(Math.random()*AI_MODELS.length)|0], M = MODELS[mk];
       applyModel(c, mk, { vmax: rand(0.94, 0.995)*hab*M.vmax, acc: rand(0.9, 1.06)*M.acc, grip: M.grip, wt: M.wt });
       c.stripe = ['doble', 'central', 'laterales', 'doble'][(Math.random()*4)|0];
-      c.skill = rand(1.0, 1.28)*C.habilidadRivales; c.skillNow = c.skill;
+      c.skill = rand(1.0, 1.28)*C.habilidadRivales; c.skillNow = c.skill; c.mistakeP = 0.12*dMist;
       c.pref = rand(-12, 12); c.aggr = C.agresividadRivales*rand(0.5, 1.5);
     }
     else { applyModel(c, MODEL_OVR || prof.model, ps); c.col = prof.col; c.acc = prof.acc; c.stripe = prof.stripe; }
@@ -3424,7 +3428,7 @@ function playerFinished() {
   // más vueltas y circuitos de copas más altas pagan más
   const lapF = Math.max(0.7, Math.min(2.6, LAPS/3)), tierF = 1 + Math.max(0, CUP_KEYS.indexOf(champRace && prof.champ ? prof.champ.cup : trackCup(TRACK_KEY)))*0.3;
   // más rivales y más dificultad pagan más (antes Fácil con 3 rivales pagaba igual que Difícil con 7)
-  const fieldF = tut ? 1 : Math.max(0.8, Math.min(1.2, 0.4 + cars.length*0.1)), diffF = tut ? 1 : SET.diff === 'facil' ? 0.85 : SET.diff === 'dificil' ? 1.2 : 1;
+  const fieldF = tut ? 1 : Math.max(0.8, Math.min(1.2, 0.4 + cars.length*0.1)), diffF = tut || champRace ? 1 : SET.diff === 'facil' ? 0.85 : SET.diff === 'dificil' ? 1.2 : SET.diff === 'experto' ? 1.4 : 1;
   const placeP = Math.round(PRIZES[Math.min(PRIZES.length - 1, player.pos - 1)]*lapF*tierF*fieldF*diffF/10)*10;
   player.earn = placeP + (player.bonus || 0)*30 + (newLapRec ? 300 : 0);
   player.earnParts = { puesto: placeP, drifts: player.bonus || 0, rec: newLapRec, mult: WX.pay };
@@ -4750,7 +4754,7 @@ function gPreviewLoop(now) {
 const SET = prof.set = Object.assign({ vol: 0.9, eng: 1, fx: 1, vib: true, drone: true, names: true, warn: true, laps: 3, rivals: 5, diff: 'normal', quality: 'auto', lang: 'auto', music: 0.55, voice: true, vgen: 'f', intro: true, damage: true, mode: 'carrera' }, prof.set || {});
 if (SET.qv !== 2) { SET.quality = 'auto'; SET.qv = 2; }
 SET.warn = false; SET.voice = false;   // sin aviso de cuándo soltar y sin locutor   // antes todos arrancaban en Máxima: ahora es automática salvo que la elijas
-const DIFFS = { facil: ['Fácil', 0.93], normal: ['Normal', 1.0], dificil: ['Difícil', 1.06] };
+const DIFFS = { facil: ['Fácil', 0.98], normal: ['Normal', 1.05], dificil: ['Difícil', 1.11], experto: ['Experto', 1.17] };   // más duras que antes (0.93 / 1.0 / 1.06)
 function applySettings() {
   C.movimientoDrone = SET.drone ? 1 : 0;
   C.vueltas = SET.laps; C.rivales = SET.rivals; C.posicionLargada = SET.rivals + 1;
@@ -4843,7 +4847,7 @@ function pRender() {
   row('#pGame', 'Intro al abrir', 'Presentación con música al iniciar el juego', toggle('intro'));
   row('#pRace', 'Vueltas', 'Más vueltas = más plata y experiencia', seg('laps', [[2, '2'], [3, '3'], [5, '5'], [7, '7'], [10, '10']], applySettings));
   row('#pRace', 'Rivales', '', seg('rivals', [[3, '3'], [5, '5'], [7, '7']], applySettings));
-  row('#pRace', 'Dificultad', '', seg('diff', Object.entries(DIFFS).map(([k, v]) => [k, v[0]]), applySettings));
+  row('#pRace', 'Dificultad', champRace ? 'En las copas no se usa: cada copa tiene la suya' : 'Carrera libre y modos. Las copas tienen la suya', seg('diff', Object.entries(DIFFS).map(([k, v]) => [k, v[0]]), applySettings));
   if (!inRace) row('#pGame', 'Idioma', '🌐', seg('lang', [['auto', 'Auto'], ['es', 'Español'], ['en', 'English']], () => { saveProf(); location.reload(); }));
   row('#pGfx', 'Calidad', 'Se aplica al volver a abrir el juego. Ahorro = menos batería', seg('quality', [['maxima', 'Máxima'], ['auto', 'Auto'], ['ahorro', 'Ahorro']], () => { try { localStorage.removeItem('driftloop_fxl'); localStorage.removeItem('driftloop_ql'); } catch(e) {} }));
   if (inRace) { const n = document.createElement('div'); n.className = 'note'; n.textContent = 'Los cambios de "Próxima carrera" se aplican al reiniciar o en la siguiente carrera.'; q('#pRace').appendChild(n); }
@@ -5231,6 +5235,7 @@ function openMorePanel() {
   add(3, '🌟', LX('EVENTO DE LA SEMANA', 'EVENT OF THE WEEK'), (() => { try { const w = weekInfo(); return w.mod.name + ' · ' + TRACKS[w.track].name; } catch(e) { return ''; } })(), () => { hidePanel(); eventGo(); });
   add(2, '🎯', LX('DESAFÍOS DEL DÍA', 'DAILY CHALLENGES'), moreBadge() ? moreBadge() + LX(' pendientes', ' left') : LX('Todos hechos', 'All done'), () => openChallengesPanel());
   add(4, '⏱', LX('CONTRARRELOJ', 'TIME TRIAL'), LX('Vos contra tu mejor vuelta', 'You against your best lap'), () => openTTPanel());
+  add(3, '🔀', LX('CARRERA MIXTA', 'MIXED RACE'), LX('Autos, motos, camiones y fórmulas en la misma pista', 'Cars, bikes, trucks and formula cars on one track'), () => { SET.mode = 'mixta'; saveProf(); menuGo(); });
   add(3, '☠', LX('ELIMINACIÓN', 'ELIMINATION'), LX('Cada vuelta queda afuera el último', 'The last car is out every lap'), () => { SET.mode = 'elim'; saveProf(); menuGo(); });
   add(3, '🌀', 'DRIFT', LX('Encadená derrapes y sumá puntos', 'Chain drifts for points'), () => { SET.mode = 'drift'; saveProf(); menuGo(); });
   add(3, '👥', LX('DE A DOS', 'TWO PLAYERS'), LX('Dos jugadores en el mismo celular', 'Two players on one phone'), () => { SET.mode = 'duo'; saveProf(); menuGo(); });
@@ -5309,6 +5314,7 @@ const CUPS = {
               races: [{ track: 'blanco', wx: 'cambian' }, { track: 'abismo', wx: 'noche' }, { track: 'perfecta', wx: 'tormenta' }, { track: 'laberfinal', wx: 'cambia' }, { track: 'granfinal', wx: 'noche' }] }
 };
 const CUP_KEYS = Object.keys(CUPS);
+function cupHab(k) { return 1.02 + Math.max(0, CUP_KEYS.indexOf(k))*0.025; }   // Bronce 1.02 → Leyenda 1.195: cada copa más difícil
 const DIFF_NAME = ['', 'FÁCIL', 'MEDIA', 'DIFÍCIL', 'EXTREMA', 'PRO', 'ÉLITE', 'INSANA', 'LEYENDA'];
 const THEME_NAME = { pasto: 'Campo', costa: 'Costa', desierto: 'Desierto', nieve: 'Nieve', volcan: 'Volcán' };
 prof.cups = prof.cups || {};                                   // mejor puesto final en cada copa
@@ -5342,7 +5348,8 @@ function champStandings() {
 function resetChampRace() {
   LAPS = Math.max(1, C.vueltas|0);
   const ps = playerStats(), pp = (ps.vmax - 1)*0.6 + (ps.grip - 1)*0.5 + (ps.acc - 1)*0.2;
-  const hab = (prof.stats.races < 5 ? 0.9 : 1)*C.habilidadRivales*(1 + (CUP_KEYS.indexOf(prof.champ.cup) >= 2 ? Math.min(0.12, Math.max(0, pp)*0.5) : 0));
+  const ci = CUP_KEYS.indexOf(prof.champ.cup), cf = cupHab(prof.champ.cup);   // la dificultad la pone la copa: no se puede cambiar
+  const hab = (prof.stats.races < 5 && ci === 0 ? 0.95 : 1)*cf*(1 + (ci >= 1 ? Math.min(0.14, Math.max(0, pp)*0.6) : 0));
   const grid = champStandings().reverse();
   cars = [];
   grid.forEach((e, i) => {
@@ -5355,7 +5362,7 @@ function resetChampRace() {
       const cup = CUPS[prof.champ.cup], ue = upgEff(cup.rup || 0), mk = MODELS[prof.model].truck ? 'camion' : MODELS[prof.model].formula || MODELS[prof.model].moto ? prof.model : (cup.rmod && cup.rmod[r.name]) || r.model, MM = MODELS[mk];
       // los rivales también tienen mejoras (más en cada copa) y en las copas altas usan los mejores autos
       applyModel(c, mk, { vmax: r.vmax*hab*MM.vmax*cup.vm*(1 + 0.025*ue), acc: MM.acc*(1 + 0.05*ue), grip: MM.grip*(1 + 0.03*ue), wt: MM.wt*Math.max(0.45, 1 - 0.09*ue), steer: 1 + 0.06*ue, brake: 1 + 0.08*ue });
-      c.skill = Math.min(1.38, r.skill*C.habilidadRivales*cup.sk); c.skillNow = c.skill; c.mistakeP = Math.min(0.6, r.mist*cup.mist);
+      c.skill = Math.min(1.5, r.skill*cf*cup.sk); c.skillNow = c.skill; c.mistakeP = Math.min(0.6, r.mist*cup.mist*Math.max(0.35, 1 - ci*0.09));
       c.pref = rand(-12, 12); c.aggr = r.aggr;
     }
     cars.push(c);
