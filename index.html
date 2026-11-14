@@ -152,7 +152,7 @@ const I18N_EN = {
   'VISTA PREVIA · TUYO': 'PREVIEW · OWNED', 'VOLVER': 'BACK', 'CERRAR': 'CLOSE', 'COMPRAR': 'BUY',
   'Comprá con tu plata o desbloqueá con logros. Lo que ya es tuyo se elige con un toque.': 'Buy with your cash or unlock with achievements. Anything you own is one tap away.',
   'Las mejoras sirven para todos tus autos. Los rivales también se van poniendo mejores, así que la carrera sigue pareja.': 'Upgrades apply to all your cars. Rivals keep improving too, so races stay close.',
-  'Tocá un auto para verlo con tus colores; usalo o compralo con el botón de arriba. Ganás plata en cada carrera según tu puesto, más $30 por cada drift o curva perfecta.': 'Tap a car to see it in your colors; use it or buy it with the button above. You earn cash every race based on your position, plus $30 per drift or perfect corner.',
+  'Cada vehículo tiene su propia pintura. Tocá uno para verlo; usalo o compralo con el botón de arriba. Ganás plata en cada carrera según tu puesto, más $30 por cada drift o curva perfecta.': 'Every vehicle has its own paint. Tap one to see it; use it or buy it with the button above. You earn cash every race based on your position, plus $30 per drift or perfect corner.',
   // ---- copas ----
   'TABLA DE POSICIONES': 'STANDINGS', 'TUS RIVALES': 'YOUR RIVALS', 'PREMIOS': 'PRIZES', 'ABANDONAR': 'QUIT', 'EMPEZAR ▶': 'START ▶',
   'Subí al podio para ganar el trofeo y desbloquear la copa siguiente.': 'Finish on the podium to win the trophy and unlock the next cup.',
@@ -1862,12 +1862,37 @@ const prof = (function () {
   o.upgs = o.upgs || {};
   if (p.upg && !p.upgs) { if (Object.values(p.upg).some(v => v > 0)) o.upgs.gt = Object.assign({}, p.upg); }
   delete o.upg;
+  // pintura por vehículo (prof.paint[modelo]). La que tenías queda en el auto que estabas usando; los demás traen la suya de fábrica
+  if (!p.paint) { o.paint = {}; if (p.col && MODELS[o.model]) o.paint[o.model] = { col: p.col, acc: p.acc || '#f4f4f0', stripe: p.stripe || 'doble' }; }
+  delete o.col; delete o.acc; delete o.stripe;
   if (!MODELS[o.model]) o.model = 'gt';
   return o;
 })();
 applyWeather(prof.weather || 'dia');
 prof.style = Object.assign({ rim: 'negro', neon: 'no', smoke: 'blanco' }, prof.style || {});
 prof.bought = prof.bought || {};
+// pintura de fábrica de cada vehículo: color, color de las franjas y diseño
+const PAINT_DEF = {
+  gt:        { col: '#c8102e', acc: '#f4f4f0', stripe: 'doble' },
+  hatch:     { col: '#1f6fd1', acc: '#ffd23f', stripe: 'laterales' },
+  muscle:    { col: '#ff7a00', acc: '#121316', stripe: 'central' },
+  proto:     { col: '#00796b', acc: '#f4f4f0', stripe: 'diagonal' },
+  jdm:       { col: '#f1f1ec', acc: '#d7141a', stripe: 'rayo' },
+  hiper:     { col: '#f2c200', acc: '#121316', stripe: 'carbono' },
+  rcoupe:    { col: '#14452f', acc: '#f2c200', stripe: 'damero' },
+  r4x4:      { col: '#f1f1ec', acc: '#0b3d91', stripe: 'diagonal' },
+  camion:    { col: '#0b3d91', acc: '#f2c200', stripe: 'doble' },
+  camionx:   { col: '#7a0f12', acc: '#ff7a00', stripe: 'llamas' },
+  fjr:       { col: '#0091d5', acc: '#f4f4f0', stripe: 'doble' },
+  f1:        { col: '#d7141a', acc: '#f4f4f0', stripe: 'doble' },
+  scooter:   { col: '#8fd3c7', acc: '#f4f4f0', stripe: 'ninguna' },
+  moto:      { col: '#f2c200', acc: '#121316', stripe: 'doble' },
+  superbike: { col: '#d7141a', acc: '#f4f4f0', stripe: 'doble' }
+};
+function paintOf(k, make) { let p = prof.paint[k]; if (!p && make) p = prof.paint[k] = Object.assign({}, PAINT_DEF[k] || PAINT_DEF.gt); return p || PAINT_DEF[k] || PAINT_DEF.gt; }
+function paintK() { try { if (garageOpen) return gView; } catch(e) {} return (typeof MODEL_OVR !== 'undefined' && MODEL_OVR) || prof.model; }
+// prof.col / prof.acc / prof.stripe siguen existiendo, pero ahora son los del vehículo en uso (o el que mirás en el garaje)
+for (const f of ['col', 'acc', 'stripe']) Object.defineProperty(prof, f, { enumerable: true, configurable: true, get() { return paintOf(paintK())[f]; }, set(v) { paintOf(paintK(), true)[f] = v; } });
 const UPG0 = Object.freeze({ motor: 0, caja: 0, neum: 0, susp: 0, frenos: 0 });
 function upgOf(k, make) { let u = prof.upgs[k]; if (!u && make) u = prof.upgs[k] = { motor: 0, caja: 0, neum: 0, susp: 0, frenos: 0 }; return u || UPG0; }
 function upgLevels() { let n = 0; for (const k in prof.upgs) for (const j in prof.upgs[k]) n += prof.upgs[k][j] || 0; return n; }
@@ -2211,10 +2236,19 @@ const SPECIAL_SPR = (function () {
 
   function camion(g, sp, C, A) {   // cabina adelante, de carrera europea
     tyre(g, 14.6, -14.6, 7, 4); tyre(g, 14.6, 10.6, 7, 4); duals(g, -24.6, 8.6, 9.2, 5.6);
-    frame(g, -26.6, 9, 5.8); fifth(g, -15.6);
-    g.fillStyle = chrome(g, -11.6, -7.4); rrG(g, -8, -11.2, 12, 3.8, 1.8); g.fill(); g.strokeStyle = 'rgba(0,0,0,.25)'; g.lineWidth = 0.25; g.beginPath(); for (const x of [-5, -1, 3]) { g.moveTo(x, -11.2); g.lineTo(x, -7.4); } g.stroke();   // tanque
-    g.fillStyle = '#26292f'; rrG(g, -6, 7.4, 8, 3.6, 0.8); g.fill(); g.fillStyle = '#3a3e46'; for (const x of [-4.5, -1.5]) { g.beginPath(); g.arc(x, 9.2, 1.2, 0, 7); g.fill(); }   // baterías y tanques de aire
-    sym(s => { g.fillStyle = '#101113'; g.fillRect(-26.4, s > 0 ? 9 : -14.6, 1, 5.6); });                              // guardabarros de goma
+    // carrocería trasera (los camiones de carrera no muestran el chasis): faldones, tomas, aleta y alerón
+    const deck = () => { g.beginPath(); g.moveTo(9, -11.2); g.lineTo(-22, -11.2); g.quadraticCurveTo(-26.2, -11.2, -26.4, -8); g.lineTo(-26.4, 8); g.quadraticCurveTo(-26.2, 11.2, -22, 11.2); g.lineTo(9, 11.2); g.closePath(); };
+    deck(); g.fillStyle = vg(g, mul(C, 0.82), -11.2, 11.2); g.fill();
+    g.save(); deck(); g.clip();
+    g.fillStyle = rgba(A, 1); for (const o of [0, 4]) { g.beginPath(); g.moveTo(10 - o, -12); g.lineTo(7 - o, -12); g.lineTo(-3 - o, 12); g.lineTo(0 - o, 12); g.closePath(); g.fill(); }
+    g.fillStyle = 'rgba(0,0,0,.28)'; g.fillRect(-27, -11.2, 37, 2.2); g.fillRect(-27, 9, 37, 2.2);              // faldones
+    const lg = g.createLinearGradient(-26, 0, 9, 0); lg.addColorStop(0, 'rgba(0,0,0,.35)'); lg.addColorStop(1, 'rgba(255,255,255,.1)'); g.fillStyle = lg; g.fillRect(-27, -12, 37, 24);
+    g.restore(); deck(); g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = 0.4; g.stroke();
+    g.fillStyle = '#0b0c0e'; for (const s of [-1, 1]) { rrG(g, -9, s > 0 ? 4 : -6.8, 9, 2.8, 1); g.fill(); g.strokeStyle = 'rgba(255,255,255,.14)'; g.lineWidth = 0.22; g.beginPath(); for (let x = -8.2; x < 0; x += 1.1) { g.moveTo(x, s > 0 ? 4.4 : -6.4); g.lineTo(x, s > 0 ? 6.4 : -4.4); } g.stroke(); }   // tomas de los frenos
+    g.fillStyle = rgba(mul(C, 0.6), 1); g.fillRect(-24, -0.5, 18, 1);                                             // aleta central
+    num(g, sp.num, -15, 0, 3.2);
+    g.fillStyle = '#121316'; rrG(g, -28.4, -12.4, 2.6, 24.8, 0.6); g.fill(); g.fillStyle = rgba(A, 1); g.fillRect(-28.4, -12.4, 2.6, 1.3); g.fillRect(-28.4, 11.1, 2.6, 1.3);   // alerón
+    for (const s of [-1, 1]) { g.fillStyle = '#121316'; g.fillRect(-26.6, s*7 - 0.4, 1.4, 0.8); }
     sym(s => { g.fillStyle = chrome(g, s*9.8 - 1.5, s*9.8 + 1.5); g.beginPath(); g.arc(6.6, s*9.6, 1.5, 0, 7); g.fill(); g.fillStyle = '#0d0e10'; g.beginPath(); g.arc(6.6, s*9.6, 0.8, 0, 7); g.fill(); });   // escapes
     // cabina
     const cab = () => { g.beginPath(); g.moveTo(8.4, -12.4); g.lineTo(23.6, -12.6); g.quadraticCurveTo(25.6, -12.6, 25.6, -10.4); g.lineTo(25.6, 10.4); g.quadraticCurveTo(25.6, 12.6, 23.6, 12.6); g.lineTo(8.4, 12.4); g.closePath(); };
@@ -2233,15 +2267,20 @@ const SPECIAL_SPR = (function () {
     sym(s => { light(g, 25.8, s*10.6, 1.4, '#fff3c0'); g.fillStyle = '#ffb347'; g.fillRect(25.2, s > 0 ? 7.6 : -8.4, 0.8, 0.8); });
     sym(s => { g.strokeStyle = '#1a1b1f'; g.lineWidth = 0.45; g.beginPath(); g.moveTo(21, s*12.4); g.lineTo(21.6, s*14.2); g.stroke(); g.fillStyle = '#121316'; rrG(g, 20.2, s > 0 ? 13.6 : -15.4, 2.6, 1.8, 0.5); g.fill(); });   // espejos
     num(g, sp.num, 14, 0, 3.8);
-    sym(s => { g.fillStyle = '#a81c14'; g.fillRect(-27, s > 0 ? 7.4 : -9.4, 0.8, 2); });
+    sym(s => { g.fillStyle = '#ff3b2a'; g.fillRect(-28.6, s > 0 ? 8 : -9.6, 0.5, 1.6); });
   }
 
   function camionx(g, sp, C, A) {   // trompa larga americana, cromo por todos lados
     tyre(g, 13.4, -14.4, 7, 4.2); tyre(g, 13.4, 10.2, 7, 4.2); duals(g, -25.8, 6.6, 9, 5.4); duals(g, -18.2, 6.6, 9, 5.4);
-    frame(g, -27, 4, 5.6); fifth(g, -18.6);
+    frame(g, -27, 4, 5.6);
+    const dp = g.createLinearGradient(0, -5.4, 0, 5.4); dp.addColorStop(0, '#5d636c'); dp.addColorStop(0.5, '#a7aeb7'); dp.addColorStop(1, '#5d636c');   // chapa antideslizante
+    g.fillStyle = dp; rrG(g, -12, -5.4, 15.4, 10.8, 0.8); g.fill(); g.strokeStyle = 'rgba(0,0,0,.28)'; g.lineWidth = 0.22; g.beginPath();
+    for (let x = -11.4; x < 3; x += 1.1) for (let y = -4.8; y < 5; y += 1.2) { g.moveTo(x, y); g.lineTo(x + 0.5, y + 0.4); g.moveTo(x + 0.55, y + 0.6); g.lineTo(x + 0.05, y + 1); } g.stroke();
+    fifth(g, -18.6);
+    g.fillStyle = cChrome ? '#2a2d33' : '#2a2d33'; rrG(g, -26, -4.6, 3, 9.2, 0.6); g.fill(); g.fillStyle = '#ff3b2a'; for (const y of [-3.4, -1.2, 1.2, 3.4]) { g.beginPath(); g.arc(-26.6, y, 0.45, 0, 7); g.fill(); }   // barra de luces trasera
     sym(s => { g.fillStyle = chrome(g, s > 0 ? 6.6 : -10.6, s > 0 ? 10.6 : -6.6); rrG(g, -10, s > 0 ? 6.6 : -10.6, 11, 4, 2); g.fill();
                g.strokeStyle = 'rgba(0,0,0,.25)'; g.lineWidth = 0.25; g.beginPath(); for (const x of [-7, -3, 1]) { g.moveTo(x, s > 0 ? 6.6 : -10.6); g.lineTo(x, s > 0 ? 10.6 : -6.6); } g.stroke();
-               g.fillStyle = '#101113'; g.fillRect(-27.2, s > 0 ? 9 : -14.4, 1, 5.4); });
+               g.fillStyle = '#101113'; g.fillRect(-27.2, s > 0 ? 9 : -14.4, 1, 5.4); g.fillStyle = cChrome(g, -0.5, 0.5); g.fillRect(-27.2, s > 0 ? 11.2 : -12.2, 1, 1); });
     // cabina
     const cab = () => { g.beginPath(); g.moveTo(-3.4, -10.6); g.lineTo(9.6, -10.6); g.lineTo(9.6, 10.6); g.lineTo(-3.4, 10.6); g.closePath(); };
     cab(); g.fillStyle = vg(g, C, -10.6, 10.6); g.fill(); g.strokeStyle = 'rgba(0,0,0,.45)'; g.lineWidth = 0.4; g.stroke();
@@ -2283,7 +2322,16 @@ function makeCarSprite(spec) {
   const W0 = 60, H0 = 36, c = mkCanvas(W0*SPR, H0*SPR), g = c.getContext('2d');
   g.scale(SPR, SPR); g.translate(W0/2, H0/2);
   const C0 = hexRGB(spec.col), A0 = hexRGB(spec.acc), hw = L.hw;
-  if (SPECIAL_SPR[mk]) { SPECIAL_SPR[mk](g, spec, C0, A0); return c; }
+  if (SPECIAL_SPR[mk]) {
+    SPECIAL_SPR[mk](g, spec, C0, A0);
+    g.save(); g.globalCompositeOperation = 'source-atop';
+    const lv = g.createLinearGradient(-30, 0, 30, 0); lv.addColorStop(0, 'rgba(0,0,0,.28)'); lv.addColorStop(0.45, 'rgba(0,0,0,0)'); lv.addColorStop(1, 'rgba(255,255,255,.14)');
+    g.fillStyle = lv; g.fillRect(-30, -18, 60, 36);
+    const sv = g.createLinearGradient(0, -18, 0, 18); sv.addColorStop(0, 'rgba(255,255,255,.12)'); sv.addColorStop(0.5, 'rgba(255,255,255,0)'); sv.addColorStop(1, 'rgba(0,0,0,.2)');
+    g.fillStyle = sv; g.fillRect(-30, -18, 60, 36);
+    g.restore();
+    return c;
+  }
   // ruedas
   for (const [x, w] of (m === 'moto' ? [] : [L.fw, L.rw])) for (const s of [-1, 1]) {
     const y = s > 0 ? L.wy - 1.8 : -L.wy - 1.6, gr = g.createLinearGradient(0, y, 0, y + 3.4);
@@ -4508,13 +4556,11 @@ function closeGarage(race) {
 }
 addEventListener('resize', () => { if (garageOpen) { gEl.style.left = Math.round((innerWidth - W)/2) + 'px'; gEl.style.width = W + 'px'; } });
 
-function statNorm(s) {
-  return {
-    vel: (s.vmax - 0.85)/(1.45 - 0.85), ace: (s.acc - 0.85)/(1.8 - 0.85),
-    aga: (s.grip - 0.85)/(1.5 - 0.85), est: (1.5 - s.wt)/(1.5 - 0.3)
-  };
+function statNorm(s) {   // 0 a 1 para todos los vehículos (de la scooter al Fórmula), nunca negativo
+  const n = (v, a, b) => Math.max(0.04, Math.min(1, (v - a)/(b - a)));
+  return { vel: n(s.vmax, 0.6, 1.32), ace: n(s.acc, 0.7, 1.7), aga: n(s.grip, 0.82, 1.4), est: n(1.45 - s.wt, 0, 1.0) };
 }
-function specFor(model) { return { model, col: prof.col, acc: prof.acc, num: prof.num, stripe: prof.stripe, rim: prof.style.rim }; }
+function specFor(model) { const pt = paintOf(model); return { model, col: pt.col, acc: pt.acc, num: prof.num, stripe: pt.stripe, rim: prof.style.rim }; }
 function thumb(model) {
   const c = document.createElement('canvas'), dpr = Math.min(3, devicePixelRatio || 1);
   c.width = 96*dpr; c.height = 58*dpr; const g = c.getContext('2d');
@@ -4603,7 +4649,7 @@ function gRender() {
     if (hidden.length) { const cats = [...new Set(hidden.map(catOf))], nm = { rally: EN ? 'Rally' : 'Rally', truck: EN ? 'Trucks' : 'Camiones', formula: EN ? 'Formula' : 'Fórmula', moto: EN ? 'Bikes' : 'Motos' };
       const lk = el('div', 'card', `<div class="ci"><h4>🔒 ${cats.map(c => nm[c]).join(' · ')}</h4><p>${EN ? 'Get the license for each category to unlock its vehicles. Licenses are in MORE → Events & licenses.' : 'Sacá la licencia de cada categoría para ver sus vehículos. Las licencias están en MÁS → Eventos y licencias.'}</p></div>`);
       lk.style.opacity = '.75'; lk.onclick = () => { closeGarage(); openLicPanel(); }; body.appendChild(lk); }
-    body.appendChild(el('div', 'hint', 'Tocá un auto para verlo con tus colores; usalo o compralo con el botón de arriba. Ganás plata en cada carrera según tu puesto, más $30 por cada drift o curva perfecta.'));
+    body.appendChild(el('div', 'hint', 'Cada vehículo tiene su propia pintura. Tocá uno para verlo; usalo o compralo con el botón de arriba. Ganás plata en cada carrera según tu puesto, más $30 por cada drift o curva perfecta.'));
   } else if (gTab === 'color') {
     const swatches = (title, list, key) => {
       body.appendChild(el('div', 'sec', title));
@@ -4628,7 +4674,7 @@ function gRender() {
       body.appendChild(el('div', 'sec', title));
       const ch = el('div', 'chips st');
       for (const [k, lab, o] of STYLE_ITEMS[cat]) {
-        const own = styleOwned(cat, k, o), on = cur === k;
+        const own = styleOwned(cat, k, o) || (cat === 'vinyl' && (PAINT_DEF[gView] || {}).stripe === k), on = cur === k;   // el diseño de fábrica de cada auto siempre se puede volver a elegir
         const b = el('button', (on ? 'on' : '') + (own ? '' : o.need || o.lvl ? ' lock' : ' buy'), (swatch ? `<i style="background:${swatch(k)}"></i>` : '') + lab + (own ? '' : o.lvl ? ` 🔒<small>NIV ${o.lvl}</small>` : o.need ? ' 🔒' : `<small>${fmtMoney(o.price)}</small>`));
         b.onclick = () => {
           if (own) { set(k); saveProf(); sfxBlip(800, 0.05); gRender(); return; }
