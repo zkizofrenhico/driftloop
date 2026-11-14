@@ -3816,9 +3816,10 @@ function render() {
     const bo = bodyOff(c); ctx.save(); ctx.translate(c.wx + bo[0], c.wy + bo[1]); ctx.rotate(c.va); if (c.airT > 0) { const sc = 1 + airH(c)*0.6; ctx.scale(sc, sc); }
     if (c.moto) {   // se acuesta hacia adentro de la curva; caída: de costado en el piso
       if (c.wobT > 0) ctx.rotate(Math.sin(c.wobT*40)*0.12*c.wobT/0.45);
-      { const ln = Math.max(-1, Math.min(1, (c.r || 0)*(c.v || 0)/420)); c.lean = (c.lean || 0) + (ln - (c.lean || 0))*0.2; ctx.translate(0, c.lean*2.6); ctx.scale(1, 1 + Math.abs(c.lean)*0.55); }
+      if (c.v > 25) ctx.rotate(angDiff(Math.atan2(c.vy, c.vx), c.va)*0.85);   // una moto no va cruzada: se dibuja casi en la dirección en que avanza
+      { const ln = Math.max(-1, Math.min(1, (c.r || 0)*(c.v || 0)/420)); c.lean = (c.lean || 0) + (ln - (c.lean || 0))*0.2; ctx.translate(0, c.lean*0.9); }   // al inclinarse se corre apenas hacia adentro, sin deformarse
     }
-    ctx.drawImage(carSprite(c), -30, -18, 60, 36); drawDamage(c); if (FXL >= 3 && c.isPlayer) drawSheen(c);
+    ctx.drawImage(carSprite(c), -30, -18, 60, 36); if (!c.moto) drawDamage(c); if (FXL >= 3 && c.isPlayer && !c.moto) drawSheen(c);
     if (c.popFx > 0) { const L = LAYOUT[c.model], s = 10 + c.popFx*120; ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(puffGlowWarm, L.tail - s*1.1, -s/2, s, s); ctx.drawImage(puffGlowRed, L.tail - s*1.4, -s*0.35, s*0.7, s*0.7); ctx.globalCompositeOperation = 'source-over'; }
     const brake = racingNow && !c.throttle && c.v > 20;
     if (brake) {
