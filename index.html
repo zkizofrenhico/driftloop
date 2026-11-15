@@ -7211,31 +7211,32 @@ function reqReward() {
    Progreso en prof.lic = { idPrueba: medalla 1-3 }, prof.licT = mejores tiempos, prof.licPaid = premios ya cobrados.
    ===================================================================== */
 var licMode = false, LIC_CUR = null, MODEL_OVR = null;
+// tiempos medidos con la física actual (nov 2026): oro ≈ 1,5% mejor que el mejor piloto automático, plata +4%, bronce +12%
 const LICS = [
   { k: 'B', name: 'LICENCIA B · NACIONAL', en: 'B LICENSE · NATIONAL', col: '#6fc3ff', track: 'autodromo', prize: 2000, gold: 4000, tests: [
-    { id: 'B1', name: 'Largada y primera curva', en: 'Launch and first corner', car: 'hatch', frac: 0.4, t: [6.7, 6.2, 5.9] },
-    { id: 'B2', name: 'Media vuelta sin pisar el pasto', en: 'Half a lap, stay off the grass', car: 'gt', frac: 0.5, rule: 'clean', t: [8.4, 7.8, 7.4] },
-    { id: 'B3', name: 'Vuelta completa', en: 'Full lap', car: 'gt', frac: 1, t: [16.7, 15.5, 14.7] },
-    { id: 'B4', name: 'Vuelta completa con lluvia', en: 'Full lap in the rain', car: 'gt', frac: 1, wx: 'lluvia', t: [19.0, 17.7, 16.7] } ] },
+    { id: 'B1', name: 'Largada y primeras curvas', en: 'Launch and first corners', car: 'hatch', frac: 0.6, t: [9.9, 9.2, 8.7] },
+    { id: 'B2', name: 'Media vuelta sin pisar el pasto', en: 'Half a lap, stay off the grass', car: 'gt', frac: 0.5, rule: 'clean', t: [8.2, 7.6, 7.2] },
+    { id: 'B3', name: 'Vuelta completa', en: 'Full lap', car: 'gt', frac: 1, t: [16.5, 15.3, 14.5] },
+    { id: 'B4', name: 'Vuelta completa con lluvia', en: 'Full lap in the rain', car: 'gt', frac: 1, wx: 'lluvia', t: [18.8, 17.5, 16.6] } ] },
   { k: 'R', name: 'LICENCIA R · RALLY', en: 'R LICENSE · RALLY', col: '#d39a4a', track: 'rsierra', need: ['B'], prize: 3000, gold: 6000, tests: [
-    { id: 'R1', name: 'Tierra suelta', en: 'Loose dirt', car: 'r4x4', frac: 0.35, t: [10.7, 9.9, 9.4] },
-    { id: 'R2', name: 'De costado con tracción trasera', en: 'Sideways with rear-wheel drive', car: 'rcoupe', frac: 0.6, t: [20.5, 19.1, 18.0] },
-    { id: 'R3', name: 'Etapa completa', en: 'Full stage', car: 'r4x4', frac: 1, t: [29.8, 27.7, 26.1] } ] },
-  { k: 'C', name: 'LICENCIA C · CAMIONES', en: 'C LICENSE · TRUCKS', col: '#8fb3d9', track: 'superovalo', need: ['B'], prize: 3000, gold: 6000, tests: [
-    { id: 'C1', name: 'Frenada larga', en: 'Long braking', car: 'camion', frac: 0.3, t: [8.4, 7.8, 7.3] },
-    { id: 'C2', name: 'Vuelta completa sin pisar el pasto', en: 'Full lap, stay off the grass', car: 'camion', frac: 1, rule: 'clean', t: [27.6, 25.6, 24.2] },
-    { id: 'C3', name: 'Dos vueltas con El Patrón', en: 'Two laps in The Boss', car: 'camionx', frac: 2, t: [51.0, 47.4, 44.7] } ] },
+    { id: 'R1', name: 'Tierra suelta', en: 'Loose dirt', car: 'r4x4', frac: 0.35, t: [10.1, 9.7, 9.2] },
+    { id: 'R2', name: 'De costado con tracción trasera', en: 'Sideways with rear-wheel drive', car: 'rcoupe', frac: 0.6, t: [19.5, 18.1, 17.1] },
+    { id: 'R3', name: 'Etapa completa', en: 'Full stage', car: 'r4x4', frac: 1, t: [28.8, 26.7, 25.3] } ] },
+  { k: 'C', name: 'LICENCIA C · CAMIONES', en: 'C LICENSE · TRUCKS', col: '#8fb3d9', track: 'valle', need: ['B'], prize: 3000, gold: 6000, tests: [
+    { id: 'C1', name: 'Frenada larga', en: 'Long braking', car: 'camion', frac: 0.4, t: [8.8, 8.1, 7.7] },
+    { id: 'C2', name: 'Vuelta completa sin pisar el pasto', en: 'Full lap, stay off the grass', car: 'camion', frac: 1, rule: 'clean', t: [22.8, 21.1, 20.0] },
+    { id: 'C3', name: 'Dos vueltas con El Patrón', en: 'Two laps in The Boss', car: 'camionx', frac: 2, t: [42.6, 39.6, 37.5] } ] },
   { k: 'F', name: 'LICENCIA F · FÓRMULA', en: 'F LICENSE · FORMULA', col: '#ff6b5e', track: 'granpremio', need: ['B'], prize: 4000, gold: 8000, tests: [
-    { id: 'F1', name: 'Recta y primera frenada', en: 'Straight and first braking zone', car: 'fjr', frac: 0.4, t: [9.9, 9.2, 8.7] },
-    { id: 'F2', name: 'Vuelta limpia en Fórmula Pibe', en: 'Clean lap in the Formula Kid', car: 'fjr', frac: 1, rule: 'clean', t: [25.0, 23.2, 21.9] },
-    { id: 'F3', name: 'Vuelta en Cohete GP', en: 'Lap in the Rocket GP', car: 'f1', frac: 1, t: [22.8, 21.2, 20.0] } ] },
+    { id: 'F1', name: 'Recta y frenadas con lluvia', en: 'Straight and braking in the rain', car: 'fjr', frac: 0.55, wx: 'lluvia', rule: 'clean', t: [13.6, 12.6, 11.9] },
+    { id: 'F2', name: 'Vuelta limpia con lluvia en Fórmula Pibe', en: 'Clean wet lap in the Formula Kid', car: 'fjr', frac: 1, wx: 'lluvia', rule: 'clean', t: [24.4, 22.7, 21.5] },
+    { id: 'F3', name: 'Vuelta limpia en Cohete GP', en: 'Clean lap in the Rocket GP', car: 'f1', frac: 1, rule: 'clean', t: [20.9, 19.4, 18.4] } ] },
   { k: 'M', name: 'LICENCIA M · MOTOS', en: 'M LICENSE · BIKES', col: '#b98cff', track: 'granpremio', need: ['B'], prize: 4000, gold: 8000, tests: [
-    { id: 'M1', name: 'Primeras curvas en la Avispa 50', en: 'First corners on the Wasp 50', car: 'scooter', frac: 0.3, t: [10.8, 10.0, 9.4] },
-    { id: 'M2', name: 'Vuelta limpia en moto', en: 'Clean bike lap', car: 'moto', frac: 1, rule: 'clean', t: [25.2, 23.4, 22.1] },
-    { id: 'M3', name: 'Vuelta en la Yaguareté 1000', en: 'Lap on the Yaguareté 1000', car: 'superbike', frac: 1, t: [23.3, 21.7, 20.4] } ] },
+    { id: 'M1', name: 'Primeras curvas en la Carpincho 600', en: 'First corners on the Capybara 600', car: 'moto', frac: 0.45, rule: 'clean', t: [11.2, 10.4, 9.8] },
+    { id: 'M2', name: 'Vuelta limpia en moto', en: 'Clean bike lap', car: 'moto', frac: 1, rule: 'clean', t: [24.9, 23.1, 21.9] },
+    { id: 'M3', name: 'Vuelta en la Yaguareté 1000', en: 'Lap on the Yaguareté 1000', car: 'superbike', frac: 1, t: [22.4, 20.8, 19.7] } ] },
   { k: 'S', name: 'SÚPER LICENCIA', en: 'SUPER LICENSE', col: '#ffe36b', track: 'serpentina', need: ['B', 'R', 'C', 'F', 'M'], prize: 8000, gold: 20000, tests: [
-    { id: 'S1', name: 'Vuelta limpia con el Toro Furioso V12', en: 'Clean lap in the Raging Bull V12', car: 'hiper', frac: 1, rule: 'clean', t: [30.2, 28.1, 26.5] },
-    { id: 'S2', name: 'Dos vueltas con lluvia en el Mosquito LMP', en: 'Two wet laps in the Mosquito LMP', car: 'proto', frac: 2, wx: 'lluvia', t: [64.2, 59.6, 56.2] } ] }
+    { id: 'S1', name: 'Vuelta limpia con el Toro Furioso V12', en: 'Clean lap in the Raging Bull V12', car: 'hiper', frac: 1, rule: 'clean', t: [32.0, 30.0, 28.1] },
+    { id: 'S2', name: 'Dos vueltas con lluvia en el Mosquito LMP', en: 'Two wet laps in the Mosquito LMP', car: 'proto', frac: 2, wx: 'lluvia', t: [62.9, 58.4, 55.3] } ] }
 ].filter(L => TRACKS[L.track]);
 const LIC_TESTS = [].concat(...LICS.map(L => L.tests.map(t => Object.assign(t, { lic: L }))));
 const LIC_ICO = ['', '🥉', '🥈', '🥇'], LIC_TXT = ['', 'BRONCE', 'PLATA', 'ORO'];
