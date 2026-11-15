@@ -7671,6 +7671,8 @@ var ON_SITE = location.hostname === 'zkizofrenhico.github.io';
 function cloudOn() { try { return !!(fbAuth && fbAuth.google); } catch(e) { return false; } }
 var CLOUD = { busy: false, last: 0, timer: null, err: '' };
 try { CLOUD.sync = JSON.parse(localStorage.getItem('driftloop_cloudsync')) || { at: 0, localAt: 0 }; } catch(e) { CLOUD.sync = { at: 0, localAt: 0 }; }
+// cada celular/navegador tiene su id: así reconoce sus propias subidas aunque se haya cerrado antes de anotarlas
+var DEV_ID = ''; try { DEV_ID = localStorage.getItem('driftloop_did') || ''; if (!DEV_ID) { DEV_ID = Math.random().toString(36).slice(2, 10) + Date.now().toString(36); localStorage.setItem('driftloop_did', DEV_ID); } } catch(e) {}
 function cloudSyncSave() { try { localStorage.setItem('driftloop_cloudsync', JSON.stringify(CLOUD.sync)); } catch(e) {} }
 
 // intercambia el token de Google por una sesión de Firebase; si había usuario anónimo, se le vincula
@@ -7691,8 +7693,8 @@ function cloudPayload() {
   const data = {}, ghosts = {};
   for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (!k || k.indexOf('driftloop_') !== 0) continue;
     if (k.indexOf('driftloop_ghost_') === 0) { if (k.indexOf('diaria') < 0) try { const g = JSON.parse(localStorage.getItem(k)); if (g && g.d) { const d = g.half ? [].concat(...g.d.map(r => [r, r])) : g.d; ghosts[k.slice(16)] = { t: g.t, model: g.model, L: g.L, e: encodeGhostData(d) }; } } catch(e) {} }
-    else if (k.indexOf('driftloop_rival_') !== 0 && !/^driftloop_(fb|cloudsync|daily_trk|fxl)$/.test(k) && !/go$/.test(k)) data[k] = localStorage.getItem(k); }
-  return JSON.stringify({ v: 1, data, ghosts });
+    else if (k.indexOf('driftloop_rival_') !== 0 && !/^driftloop_(fb|cloudsync|daily_trk|fxl|did)$/.test(k) && !/go$/.test(k)) data[k] = localStorage.getItem(k); }
+  return JSON.stringify({ v: 1, data, ghosts, did: DEV_ID, la: prof.savedAt || 0 });
 }
 function cloudApply(raw) {
   const p = JSON.parse(raw); if (!p.data || !p.data.driftloop_profile) throw 0;
@@ -7719,6 +7721,8 @@ async function cloudPull(fromLogin) {
   if (!d) { await cloudPush(); return; }
   const c = fsDec(d); CLOUD.last = c.at;
   if (c.at <= CLOUD.sync.at) { if ((prof.savedAt || 0) > CLOUD.sync.localAt) cloudSoon(2000); return; }   // la nube no tiene nada nuevo
+  let mine = null; try { const pd = JSON.parse(c.data); if (pd.did && pd.did === DEV_ID) mine = pd; } catch(e) {}
+  if (mine) { CLOUD.sync = { at: c.at, localAt: mine.la || 0 }; cloudSyncSave(); if ((prof.savedAt || 0) > CLOUD.sync.localAt) cloudSoon(2000); return; }   // es la que subió este mismo celular: no hay nada que preguntar
   const localChanged = (prof.savedAt || 0) > CLOUD.sync.localAt, fresh = (prof.lvl || 1) <= 1 && (prof.earned || 0) < 3000;
   if (fresh || (!localChanged && !fromLogin)) { cloudUse(c); return; }
   cloudAsk(c);
