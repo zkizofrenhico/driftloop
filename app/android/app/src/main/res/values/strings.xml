@@ -4,4 +4,6 @@
     <string name="title_activity_main">Drift Loop</string>
     <string name="package_name">com.agustincarreras.driftloop</string>
     <string name="custom_url_scheme">com.agustincarreras.driftloop</string>
+    <!-- ID de PRUEBA de Google. Cambiarlo por el ID de app de tu cuenta de AdMob (ca-app-pub-XXXX~YYYY) antes de publicar -->
+    <string name="admob_app_id">ca-app-pub-3940256099942544~3347511713</string>
 </resources>
