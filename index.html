@@ -626,7 +626,7 @@ const AUTOQ = QSET === 'auto';
 const MAXQ = QSET === 'maxima' || (AUTOQ && DEV_HI);
 const ECO = QSET === 'ahorro';
 let LOCK30 = false;                                       // último recurso: 30 cuadros parejos en vez de ir a los saltos
-const QCAP = MAXQ ? [3, 2, 1.5, 1] : ECO ? [1.25, 1, 1, 0.75] : [2, 1.5, 1, 0.75];   // límite de resolución por nivel de calidad
+const QCAP = MAXQ ? [3, 2, 1.5, 1] : ECO ? [1.25, 1, 1, 0.6] : [2, 1.5, 1, 0.6];   // el último nivel es para celulares que no dan abasto: menos nitidez pero fluido   // límite de resolución por nivel de calidad
 function resize() {
   const vw = innerWidth, vh = innerHeight;
   W = vw > vh ? Math.round(vh*0.6) : vw; H = vh;   // en escritorio simula un celular vertical
@@ -3036,8 +3036,11 @@ function addSkid(x1, y1, x2, y2, type) {
   const i = skHead*5; SK[i] = x1; SK[i+1] = y1; SK[i+2] = x2; SK[i+3] = y2; SK[i+4] = type;
   skHead = (skHead+1) % SK_MAX; if (skN < SK_MAX) skN++;
 }
+let partSkip = 0;
 function part(x, y, vx, vy, life, size, col, grow) {
-  if (parts.length > (QUAL >= 2 ? 180 : MAXQ ? 520 : 360)) parts.shift();
+  if (grow && QUAL >= 2 && col !== 'mist' && (partSkip = (partSkip + 1) % (QUAL >= 3 ? 3 : 2)) !== 0) return;   // en calidad baja el humo es lo más pesado de dibujar: menos bocanadas
+  const cap = LOCK30 ? 50 : QUAL >= 3 ? 70 : QUAL >= 2 ? 120 : MAXQ ? 520 : 360;
+  while (parts.length > cap) parts.shift();
   parts.push({ x, y, vx, vy, life, max: life, size, col, grow, k: partN++ % 3 });
 }
 function popup(txt, col, big) { popups.push({ txt, col, big: !!big, t: 0 }); if (popups.length > 4) popups.shift(); if (sayOK()) try { sayPopup(txt); } catch(e) {} }
@@ -8166,11 +8169,11 @@ function frame(now) {
   if (now - ecoLast < (ECO || LOCK30 ? 30 : 10)) { requestAnimationFrame(frame); return; }   // ahorro: 30 cuadros por segundo; pantallas de 120 Hz: tope de 60
   if (ADS.busy) { last = now; requestAnimationFrame(frame); return; }   // con el anuncio en pantalla el juego no dibuja nada
   ecoLast = now;
-  const raw = Math.max(0, (now - last)/1000); let dt = Math.min(ECO || LOCK30 ? 0.05 : 0.033, raw); last = Math.max(last, now);
+  const raw = Math.max(0, (now - last)/1000); let dt = Math.min(0.1, raw); last = Math.max(last, now);   // si el celular dibuja pocos cuadros, el juego igual va a velocidad real (ver pasos abajo)
   if (tut && !paused) dt *= tutTick(dt);
   if (slowT > 0 && !paused) { slowT -= raw; dt *= 0.32; }   // cámara lenta al cruzar la meta
   if (hitStop > 0 && !paused) { hitStop -= raw; dt *= 0.04; }   // micro-pausa en un choque fuerte
-  try { if (introPhase) introTick(dt); if (!paused) { update(dt); if (ttMode) ttTick(); if (licMode) licTick(); } render(); try { musicTick(); } catch(e) {} }
+  try { if (introPhase) introTick(dt); if (!paused) { const ns = Math.max(1, Math.ceil(dt/0.034 - 1e-6)); for (let i = 0; i < ns && !paused; i++) { update(dt/ns); if (ttMode) ttTick(); if (licMode) licTick(); } } render(); try { musicTick(); } catch(e) {} }
   catch (e) { errCount++; lastErr = String(e && e.message || e); lastErrT = performance.now(); if (errCount < 5) console.error(e); try { ctx.restore(); ctx.restore(); } catch(_) {} }
   syncMenu(dt); syncRes(dt);
   showErr();
