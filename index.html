@@ -195,7 +195,7 @@ const I18N_EN = {
   'DESDE EL FONDO': 'FROM THE BACK', 'Largás último contra 7 rivales': 'You start last against 7 rivals', '⭐ XP ×2': '⭐ XP ×2', 'PUNTOS': 'POINTS', 'DERRAPES': 'DRIFTS', 'MEJOR': 'BEST', 'MULT. MÁX': 'MAX MULT.', '¡TERMINADO!': 'FINISHED!', 'MULTIPLICADOR ×1': 'MULTIPLIER ×1',
   'encadená derrapes': 'chain your drifts', 'vueltas solo': 'laps solo', 'récord': 'record', '¡CHOQUE!': 'CRASH!', '1 peso cada 12 puntos': '$1 per 12 points', 'ELIMINACIÓN': 'ELIMINATION', '🎬 REPETICIÓN': '🎬 REPLAY', '📲 GUARDAR CLIP': '📲 SAVE CLIP', 'REPETICIÓN': 'REPLAY', 'META': 'FINISH', 'GRABANDO': 'REC', 'TOCÁ PARA SALIR': 'TAP TO EXIT',
   '🎬 TU CLIP': '🎬 YOUR CLIP', '📲 COMPARTIR': '📲 SHARE', '💾 GUARDAR': '💾 SAVE', 'Tu navegador no puede grabar video': "Your browser can't record video",
-  'No se pudo compartir desde acá. Probá desde zkizofrenhico.github.io/driftloop': "Couldn't share from here. Try at zkizofrenhico.github.io/driftloop", '📲 WHATSAPP': '📲 WHATSAPP', 'LIGAS': 'LEAGUES', '👥 LIGAS': '👥 LEAGUES', 'Tu nombre': 'Your name', '➕ CREAR UNA LIGA': '➕ CREATE A LEAGUE', '➕ CREAR OTRA LIGA': '➕ CREATE ANOTHER LEAGUE',
+  'No se pudo compartir desde acá. Probá desde zkizofrenhico.github.io/driftloop': "Couldn't share from here. Try at zkizofrenhico.github.io/driftloop", '📲 WHATSAPP': '📲 WHATSAPP', 'LIGAS': 'LEAGUES', '🏆 TIEMPOS': '🏆 TIMES', '👥 LIGAS': '👥 LEAGUES', 'Tu nombre': 'Your name', '➕ CREAR UNA LIGA': '➕ CREATE A LEAGUE', '➕ CREAR OTRA LIGA': '➕ CREATE ANOTHER LEAGUE',
   'CÓDIGO': 'CODE', 'UNIRME ▶': 'JOIN ▶', 'CREANDO…': 'CREATING…', 'CÓDIGO DE LA LIGA': 'LEAGUE CODE', '📲 INVITAR': '📲 INVITE', 'Cargando tiempos…': 'Loading times…', 'sin tu tiempo': 'no time yet',
   'Armá una liga con tus amigos: cada uno sube su mejor vuelta de contrarreloj en cada circuito y ven quién es el más rápido. Tocando un tiempo corrés contra el fantasma de esa vuelta.': 'Start a league with your friends: everyone uploads their best time-trial lap on each track and you see who is fastest. Tap a time to race the ghost of that lap.',
   'Todavía nadie subió tiempos. Corré una contrarreloj: tus récords se suben solos.': 'No times yet. Run a time trial: your records upload automatically.',
@@ -6139,10 +6139,10 @@ function openTTPanel() {
   }
   const locked = CUP_KEYS.filter(k => !cupUnlocked(k)).length;
   showPanel(`<div class="wrap"><h2>CONTRA<span>RRELOJ</span></h2><div class="sub">Solo vos contra el fantasma de tu mejor vuelta · medallas ${n}/${(L.length - (DAILY ? 1 : 0))*3}${locked ? ' · desbloqueá más copas para más circuitos' : ''}</div>${html}</div>
-    <div class="bar"><button class="s" data-a="back">VOLVER</button><button class="s ch2" data-a="dare">🤝 DESAFÍO</button><button class="s ch2" data-a="lg">👥 LIGAS</button></div>`);
+    <div class="bar"><button class="s" data-a="back">VOLVER</button><button class="s ch2" data-a="dare">🤝 DESAFÍO</button><button class="s ch2" data-a="lg">🏆 TIEMPOS</button></div>`);
   xEl.querySelectorAll('[data-k]').forEach(b => b.onclick = () => { initAudio(); sfxBlip(900, 0.05); ttGo(b.dataset.k); });
   xEl.querySelector('[data-a="dare"]').onclick = () => { initAudio(); openChallengeImport(); };
-  xEl.querySelector('[data-a="lg"]').onclick = () => { initAudio(); lgSel = 0; openLeaguePanel(); lgRefresh(); };
+  xEl.querySelector('[data-a="lg"]').onclick = () => { initAudio(); lgSel = 0; lgWorld = true; lgWTrack = ''; openLeaguePanel(); lgRefresh(); };
   xEl.querySelector('[data-a="back"]').onclick = () => { initAudio(); hidePanel(); };
 }
 function openTTResults() {
@@ -6346,6 +6346,15 @@ async function fsReq(method, path, body) {
   return r.json();
 }
 // ---- operaciones de liga ----
+// tabla mundial: una "liga" fija que ven todos (las reglas de Firestore ya permiten sus tiempos)
+const LG_WORLD = { code: 'MUNDIAL', name: 'MUNDIAL', world: true };
+const LG_WCATS = [['all', 'Todos', 'All'], ['', 'Autos', 'Cars'], ['rally', 'Rally', 'Rally'], ['truck', 'Camiones', 'Trucks'], ['formula', 'Fórmula', 'Formula'], ['moto', 'Motos', 'Bikes']];
+async function lgWorldTimes(track) {   // solo los tiempos de un circuito
+  const f = ['uid', 'name', 'track', 't', 'c', 'm', 'at'].map(fieldPath => ({ fieldPath }));
+  const j = await fsReq('POST', `/leagues/${LG_WORLD.code}:runQuery`, { structuredQuery: { from: [{ collectionId: 'times' }],
+    where: { fieldFilter: { field: { fieldPath: 'track' }, op: 'EQUAL', value: { stringValue: track } } }, select: { fields: f }, limit: 2000 } });
+  return (j || []).filter(x => x.document).map(x => Object.assign({ id: x.document.name.split('/').pop() }, fsDec(x.document)));
+}
 const LG_ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function lgName() { const n = prof.name || 'PILOTO', s = EN ? "'S LEAGUE" : ' Y AMIGOS'; return (n + s).slice(0, 24); }
 function lgNewCode() { let s = ''; for (let i = 0; i < 6; i++) s += LG_ABC[(Math.random()*LG_ABC.length)|0]; return s; }
@@ -6370,10 +6379,10 @@ async function lgTimes(code) {
   return out;
 }
 async function lgGhost(code, id) { const d = await fsReq('GET', `/leagues/${code}/times/${id}`); return d ? fsDec(d) : null; }
-async function lgPush(code, track, t, g) {
+async function lgPush(code, track, t, g, model) {
   await fbToken();
   const name = (prof.name || 'PILOTO').slice(0, 12);
-  return fsReq('PATCH', `/leagues/${code}/times/${fbAuth.uid}_${track}`, fsEnc({ uid: fbAuth.uid, name, track, t: +t.toFixed(3), g, c: prof.col, m: prof.model, at: Date.now() }));
+  return fsReq('PATCH', `/leagues/${code}/times/${fbAuth.uid}_${track}`, fsEnc({ uid: fbAuth.uid, name, track, t: +t.toFixed(3), g, c: prof.col, m: MODELS[model] ? model : prof.model, at: Date.now() }));
 }
 // sube a todas tus ligas el récord de un circuito (con su fantasma)
 function lgGhostFor(track) { try { const g = JSON.parse(localStorage.getItem('driftloop_ghost_' + track)); if (g && g.d && g.d.length > 10) return g; } catch(e) {} return null; }
@@ -6381,14 +6390,15 @@ async function lgSyncTrack(track, onlyCode) {
   if (track === 'diaria') return 0;
   const g = lgGhostFor(track), inf = prof.tt[track]; if (!g || !inf || !inf.best) return 0;
   let n = 0;
-  for (const L of prof.leagues || []) { if (onlyCode && L.code !== onlyCode) continue; try { await lgPush(L.code, track, inf.best, encodeGhostData(ghostRows(g))); n++; } catch(e) {} }
+  const dests = (prof.name ? [LG_WORLD] : []).concat(prof.leagues || []);   // con nombre puesto, tus récords van también a la tabla mundial
+  for (const L of dests) { if (onlyCode && L.code !== onlyCode) continue; try { await lgPush(L.code, track, inf.best, encodeGhostData(ghostRows(g)), g.model); n++; } catch(e) {} }
   return n;
 }
 async function lgSyncAll(code) { let n = 0; for (const k in prof.tt) if (k !== 'diaria') n += await lgSyncTrack(k, code); return n; }
-function lgOnRecord() { if ((prof.leagues || []).length && TRACK_KEY !== 'diaria') lgSyncTrack(TRACK_KEY).then(n => { if (n && ttSession) ttSession.lgUp = n; }).catch(() => {}); }
+function lgOnRecord() { if (((prof.leagues || []).length || prof.name) && TRACK_KEY !== 'diaria') lgSyncTrack(TRACK_KEY).then(n => { if (n && ttSession) ttSession.lgUp = n; }).catch(() => {}); }
 
 // ---- panel ----
-let lgSel = 0, lgCache = {};
+let lgSel = 0, lgCache = {}, lgWorld = true, lgWTrack = '', lgWCat = 'all', lgWCache = {};
 function lgErr(e) {
   const d = e && (e.detail || (e.name === 'AbortError' ? 'timeout' : e.name === 'TypeError' ? 'red bloqueada' : String(e.message || e)));
   return (!navigator.onLine ? 'Sin conexión a internet.' : e && e.status === 403 ? 'El servidor rechazó el pedido. Probá de nuevo.' : 'No se pudo conectar con el servidor de ligas.') + (d ? ` <small style="display:block;opacity:.7;font-size:12px">(${esc(d)})</small>` : '');
@@ -6397,13 +6407,14 @@ function openLeaguePanel(msg) {
   prof.leagues = prof.leagues || [];
   const L = prof.leagues, cur = L[Math.min(lgSel, L.length - 1)];
   const nameRow = `<div class="lgname"><span>Tu nombre</span><input class="nm" maxlength="12" placeholder="Tu nombre" value="${esc(prof.name || '')}"></div>`;
+  const tabsHTML = `<div class="lgtabs"><button data-w="1" class="${lgWorld ? 'on' : ''}">🌎 ${LX('MUNDIAL', 'WORLD')}</button>` + L.map((l, i) => `<button data-t="${i}" class="${!lgWorld && l === cur ? 'on' : ''}">${esc(l.name)}</button>`).join('') + '<button data-a="more">＋</button></div>';
   let body;
-  if (!L.length) {
+  if (lgWorld) body = tabsHTML + lgWorldBody(nameRow);
+  else if (!L.length) {
     body = `<div class="sub">Armá una liga con tus amigos: cada uno sube su mejor vuelta de contrarreloj en cada circuito y ven quién es el más rápido. Tocando un tiempo corrés contra el fantasma de esa vuelta.</div>${nameRow}
       <button class="lgbig go" data-a="new">➕ CREAR UNA LIGA</button>
       <div class="lgjoin"><input class="cd" maxlength="40" placeholder="CÓDIGO"><button data-a="join">UNIRME ▶</button></div>`;
   } else {
-    const tabs = L.map((l, i) => `<button data-t="${i}" class="${l === cur ? 'on' : ''}">${esc(l.name)}</button>`).join('') + '<button data-a="more">＋</button>';
     const data = lgCache[cur.code];
     let list = '<div class="sub" style="text-align:center;margin:20px 0">Cargando tiempos…</div>';
     if (data && data.err) list = `<div class="sub" style="text-align:center;margin:20px 0;color:#ff8a7a">${data.err}</div>`;
@@ -6417,32 +6428,56 @@ function openLeaguePanel(msg) {
           ${rows.slice(0, 5).map((r, i) => `<button class="lgr${fbAuth && r.uid === fbAuth.uid ? ' me' : ''}" data-g="${esc(r.id)}" data-k="${k}"><i>${['🥇', '🥈', '🥉'][i] || (i + 1) + '°'}</i><s style="background:${hexOK(r.c)}"></s><em>${esc(r.name)}</em><u>${r.t.toFixed(2)}</u>${fbAuth && r.uid === fbAuth.uid ? '' : '<small>⚔</small>'}</button>`).join('')}</div>`;
       }).join('') : '<div class="sub" style="text-align:center;margin:20px 0">Todavía nadie subió tiempos. Corré una contrarreloj: tus récords se suben solos.</div>';
     }
-    body = `<div class="lgtabs">${tabs}</div>
+    body = `${tabsHTML}
       <div class="lgcode"><div><small>CÓDIGO DE LA LIGA</small><b>${esc(cur.code)}</b></div><a class="wa" href="${lgInviteURL(cur)}" target="_blank" rel="noopener">📲 INVITAR</a><button data-a="ref">↻</button></div>
       ${nameRow}${list}
       <button class="lgout" data-a="leave">Salir de «${esc(cur.name)}»</button>`;
   }
-  showPanel(`<div class="wrap"><h2>LI<span>GAS</span></h2>${msg ? `<div class="lgmsg">${msg}</div>` : ''}${body}</div>
+  showPanel(`<div class="wrap"><h2>${lgWorld ? LX('TABLA <span>MUNDIAL</span>', 'WORLD <span>RANKING</span>') : 'LI<span>GAS</span>'}</h2>${msg ? `<div class="lgmsg">${msg}</div>` : ''}${body}</div>
     <div class="bar"><button class="s" data-a="back">VOLVER</button></div>`);
   const inp = xEl.querySelector('.nm');
-  if (inp) inp.onchange = () => { prof.name = inp.value.trim().toUpperCase().slice(0, 12); saveProf(); if (L.length) lgSyncAll().then(() => lgRefresh()).catch(() => {}); };
+  if (inp) inp.onchange = () => { prof.name = inp.value.trim().toUpperCase().slice(0, 12); saveProf(); if (L.length || prof.name) lgSyncAll().then(() => { lgWCache = {}; lgRefresh(); }).catch(() => {}); };
   const needName = () => { if (inp) prof.name = inp.value.trim().toUpperCase().slice(0, 12); if (!prof.name) { openLeaguePanel('Primero poné tu nombre.'); return true; } saveProf(); return false; };
-  xEl.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { lgSel = +b.dataset.t; openLeaguePanel(); lgRefresh(); });
-  xEl.querySelectorAll('[data-g]').forEach(b => b.onclick = () => lgRaceGhost(cur, b.dataset.g, b.dataset.k));
+  xEl.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { lgWorld = false; lgSel = +b.dataset.t; openLeaguePanel(); lgRefresh(); });
+  xEl.querySelectorAll('[data-w]').forEach(b => b.onclick = () => { lgWorld = true; openLeaguePanel(); lgRefresh(); });
+  xEl.querySelectorAll('[data-wc]').forEach(b => b.onclick = () => { lgWCat = b.dataset.wc; openLeaguePanel(); });
+  xEl.querySelectorAll('[data-g]').forEach(b => b.onclick = () => lgRaceGhost(lgWorld ? LG_WORLD : cur, b.dataset.g, b.dataset.k));
   xEl.querySelectorAll('[data-a]').forEach(b => b.onclick = async () => {
     initAudio(); const a = b.dataset.a;
     if (a === 'back') { hidePanel(); openTTPanel(); return; }
     if (a === 'more') { lgSel = L.length; openLeagueJoin(); return; }
+    if (a === 'wprev' || a === 'wnext') { const ks = TRACK_KEYS.filter(k => k !== 'diaria'), i = ks.indexOf(lgWTrack); lgWTrack = ks[(i + (a === 'wnext' ? 1 : ks.length - 1)) % ks.length]; openLeaguePanel(); lgRefresh(); return; }
+    if (a === 'ref' && lgWorld) { lgWCache[lgWTrack] = null; openLeaguePanel(); lgRefresh(); return; }
     if (a === 'ref') { lgCache[cur.code] = null; openLeaguePanel(); lgRefresh(); return; }
-    if (a === 'leave') { L.splice(L.indexOf(cur), 1); lgSel = 0; saveProf(); openLeaguePanel(); lgRefresh(); return; }
+    if (a === 'leave') { L.splice(L.indexOf(cur), 1); lgSel = 0; lgWorld = !L.length; saveProf(); openLeaguePanel(); lgRefresh(); return; }
     if (a === 'new') {
       if (needName()) return;
       b.disabled = true; b.textContent = 'CREANDO…';
-      try { const lg = await lgCreate(lgName()); L.push(lg); lgSel = L.length - 1; saveProf(); await lgSyncAll(lg.code); openLeaguePanel('✓ Liga creada. Mandales el código a tus amigos.'); lgRefresh(); }
+      try { const lg = await lgCreate(lgName()); L.push(lg); lgSel = L.length - 1; lgWorld = false; saveProf(); await lgSyncAll(lg.code); openLeaguePanel('✓ Liga creada. Mandales el código a tus amigos.'); lgRefresh(); }
       catch(e) { openLeaguePanel(lgErr(e)); }
     }
     if (a === 'join') lgJoin(xEl.querySelector('.cd').value, needName);
   });
+}
+function lgWorldBody(nameRow) {
+  if (!TRACKS[lgWTrack] || lgWTrack === 'diaria') lgWTrack = TRACKS[TRACK_KEY] && TRACK_KEY !== 'diaria' ? TRACK_KEY : TRACK_KEYS[0];
+  const k = lgWTrack, data = lgWCache[k], me = fbAuth && fbAuth.uid;
+  const cats = LG_WCATS.map(([c, es, en]) => `<button data-wc="${c}" class="${lgWCat === c ? 'on' : ''}">${LX(es, en)}</button>`).join('');
+  let list = `<div class="sub" style="text-align:center;margin:20px 0">${LX('Cargando tiempos…', 'Loading times…')}</div>`;
+  if (data && data.err) list = `<div class="sub" style="text-align:center;margin:20px 0;color:#ff8a7a">${data.err}</div>`;
+  else if (data) {
+    const rows = data.rows.filter(r => typeof r.t === 'number' && isFinite(r.t) && r.t > 5 && (lgWCat === 'all' || catOf(r.m) === lgWCat)).sort((a, b) => a.t - b.t);
+    const mi = rows.findIndex(r => me && r.uid === me);
+    const row = (r, i) => `<button class="lgr${me && r.uid === me ? ' me' : ''}" data-g="${esc(r.id)}" data-k="${k}"><i>${['🥇', '🥈', '🥉'][i] || (i + 1) + '°'}</i><s style="background:${hexOK(r.c)}"></s><em>${esc(r.name)}<small class="v">${esc((MODELS[r.m] || {}).name || '')}</small></em><u>${r.t.toFixed(2)}</u>${me && r.uid === me ? '' : '<small>⚔</small>'}</button>`;
+    list = rows.length ? `<div class="lgtr"><div class="h"><b>${LX('Mejores vueltas', 'Best laps')}</b>${mi >= 0 ? `<span>${LX('vas', "you're")} ${mi + 1}° ${LX('de', 'of')} ${rows.length}</span>` : `<span class="no">${LX('sin tu tiempo', 'no time yet')}</span>`}</div>
+      ${rows.slice(0, 20).map(row).join('')}${mi >= 20 ? '<div class="lgdots">⋯</div>' + row(rows[mi], mi) : ''}</div>`
+      : `<div class="sub" style="text-align:center;margin:20px 0">${LX('Todavía nadie tiene tiempo acá. ¡Sé el primero!', 'No times here yet. Be the first!')}</div>`;
+  }
+  const hint = prof.name ? LX('Tus récords de contrarreloj aparecen acá con tu nombre. Tocá un tiempo para correr contra ese fantasma.', 'Your time trial records show up here with your name. Tap a time to race that ghost.')
+                         : LX('Poné tu nombre para que tus récords de contrarreloj aparezcan en la tabla mundial.', 'Enter your name so your time trial records show up in the world ranking.');
+  return `<div class="lgw"><div class="sub">${hint}</div>${nameRow}
+    <div class="lgwtr"><button data-a="wprev">◀</button><div>${TRACK_SVG[k] || ''}<b>${TRACKS[k].name}</b></div><button data-a="wnext">▶</button><button data-a="ref">↻</button></div>
+    <div class="lgtabs lgcats">${cats}</div>${list}</div>`;
 }
 function openLeagueJoin() {
   showPanel(`<div class="wrap"><h2>LI<span>GAS</span></h2>
@@ -6451,10 +6486,10 @@ function openLeagueJoin() {
     <div class="bar"><button class="s" data-a="back">VOLVER</button></div>`);
   xEl.querySelectorAll('[data-a]').forEach(b => b.onclick = async () => {
     const a = b.dataset.a;
-    if (a === 'back') { lgSel = 0; openLeaguePanel(); lgRefresh(); return; }
+    if (a === 'back') { lgSel = 0; lgWorld = !prof.leagues.length; openLeaguePanel(); lgRefresh(); return; }
     if (a === 'join') { lgJoin(xEl.querySelector('.cd').value, () => false); return; }
     b.disabled = true; b.textContent = 'CREANDO…';
-    try { const lg = await lgCreate(lgName()); prof.leagues.push(lg); lgSel = prof.leagues.length - 1; saveProf(); await lgSyncAll(lg.code); openLeaguePanel('✓ Liga creada. Mandales el código a tus amigos.'); lgRefresh(); }
+    try { const lg = await lgCreate(lgName()); prof.leagues.push(lg); lgSel = prof.leagues.length - 1; lgWorld = false; saveProf(); await lgSyncAll(lg.code); openLeaguePanel('✓ Liga creada. Mandales el código a tus amigos.'); lgRefresh(); }
     catch(e) { lgSel = 0; openLeaguePanel(lgErr(e)); }
   });
 }
@@ -6467,19 +6502,25 @@ async function lgJoin(raw, needName) {
   try {
     const lg = await lgGet(code); if (!lg) { openLeaguePanel('No existe ninguna liga con el código ' + code + '.'); return; }
     const lname = String(lg.name || '').slice(0, 24);
-    prof.leagues.push({ code, name: lname }); lgSel = prof.leagues.length - 1; saveProf();
+    prof.leagues.push({ code, name: lname }); lgSel = prof.leagues.length - 1; lgWorld = false; saveProf();
     await lgSyncAll(code); openLeaguePanel('✓ Te uniste a «' + esc(lname) + '»'); lgRefresh();
   } catch(e) { openLeaguePanel(lgErr(e)); }
 }
 async function lgRefresh() {
+  if (lgWorld) {
+    const k = lgWTrack; if (!k || lgWCache[k] && !lgWCache[k].err && Date.now() - lgWCache[k].at < 60000) return;
+    try { lgWCache[k] = { rows: await lgWorldTimes(k), at: Date.now() }; } catch(e) { lgWCache[k] = { err: lgErr(e) }; }
+    if (panelOpen && xEl.querySelector('.lgw') && lgWTrack === k) openLeaguePanel();
+    return;
+  }
   const L = prof.leagues || [], cur = L[Math.min(lgSel, L.length - 1)]; if (!cur) return;
   try { const rows = await lgTimes(cur.code); lgCache[cur.code] = { rows, at: Date.now() }; }
   catch(e) { lgCache[cur.code] = { err: lgErr(e) }; }
   if (panelOpen && xEl.querySelector('.lgtabs')) openLeaguePanel();
 }
 function lgInviteURL(L) {
-  const text = EN ? `🏁 Join my Drift Loop league "${L.name}"! Open Time Trial → 👥 LEAGUES → Join and enter the code ${L.code}`
-                  : `🏁 ¡Sumate a mi liga de Drift Loop «${L.name}»! Abrí Contrarreloj → 👥 LIGAS → Unirme y poné el código ${L.code}`;
+  const text = EN ? `🏁 Join my Drift Loop league "${L.name}"! Open Time Trial → 🏆 TIMES → ＋ → Join and enter the code ${L.code}`
+                  : `🏁 ¡Sumate a mi liga de Drift Loop «${L.name}»! Abrí Contrarreloj → 🏆 TIEMPOS → ＋ → Unirme y poné el código ${L.code}`;
   return 'https://wa.me/?text=' + encodeURIComponent(text);
 }
 async function lgRaceGhost(L, id, track) {
@@ -6505,6 +6546,14 @@ async function lgRaceGhost(L, id, track) {
 #xp .lgtabs{display:flex;gap:6px;overflow-x:auto;margin:8px 0}
 #xp .lgtabs button{flex:none;padding:7px 12px;border-radius:16px;background:rgba(255,255,255,.08);font-size:15px;font-weight:800;white-space:nowrap}
 #xp .lgtabs button.on{background:#ffd23f;color:#111}
+#xp .lgcats button{padding:5px 10px;font-size:14px}
+#xp .lgwtr{display:flex;align-items:center;gap:6px;margin:8px 0}
+#xp .lgwtr div{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;min-width:0}
+#xp .lgwtr div svg{width:34px;height:34px;flex:none}
+#xp .lgwtr div b{font-size:19px;font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#xp .lgwtr button{flex:none;width:40px;height:40px;border-radius:20px;background:rgba(255,255,255,.08);color:#fff;font-size:17px;border:0}
+#xp .lgr small.v{display:block;color:#9aa3ad;font-size:12px;font-weight:600}
+#xp .lgdots{text-align:center;color:#9aa3ad;line-height:1}
 #xp .lgcode{display:flex;align-items:center;gap:8px;padding:10px;border-radius:10px;background:rgba(255,210,63,.08);border:1px solid rgba(255,210,63,.35)}
 #xp .lgcode div{flex:1}
 #xp .lgcode small{display:block;font-size:12px;color:#9aa3ad;font-weight:700;letter-spacing:1px}
@@ -7804,7 +7853,7 @@ async function deleteAccountData() {
   const tk = await fbToken(), uid = fbAuth.uid;
   const del = path => fbFetch(FS_BASE + path, { method: 'DELETE', headers: { Authorization: 'Bearer ' + tk } })
     .then(r => { if (!r.ok && r.status !== 404) { const e = new Error('del ' + r.status); e.status = r.status; throw e; } });
-  for (const L of prof.leagues || []) await Promise.all(TRACK_KEYS.map(k => del(`/leagues/${L.code}/times/${uid}_${k}`)));
+  for (const L of [LG_WORLD].concat(prof.leagues || [])) await Promise.all(TRACK_KEYS.map(k => del(`/leagues/${L.code}/times/${uid}_${k}`)));
   await del(`/saves/${uid}`);
   let gone = false;
   try { const r = await fbFetch('https://identitytoolkit.googleapis.com/v1/accounts:delete?key=' + FB.key, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken: tk }) }); gone = r.ok; } catch(e) {}
