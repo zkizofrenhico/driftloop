@@ -51,6 +51,8 @@
 
     <!-- Permissions -->
 
+    <!-- vertical, pero sin excluir dispositivos que no lo declaran (aviso de Play) -->
+    <uses-feature android:name="android.hardware.screen.portrait" android:required="false" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- las notificaciones del circuito del día no necesitan alarma exacta: se saca para evitar trámites en Play -->
