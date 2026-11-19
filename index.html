@@ -7050,6 +7050,26 @@ function showStreak(r) {
     const n = r.lost + 1, pay = STREAK_PAY(n); prof.money += Math.max(0, pay - r.pay); prof.streak.n = n; prof.streak.best = Math.max(prof.streak.best || 0, n); saveProf(); showStreak({ n, pay, lost: 0 }); };
   bkEl.querySelector('[data-b=ok]').onclick = () => { bkEl.style.display = 'none'; sfxBlip(1200, 0.08); if (menuShown) mRender(false); };
 }
+// ---- aviso de versión nueva (solo en la app instalada desde Google Play) ----
+let updAsked = false;
+async function checkAppUpdate(tries) {
+  const AUp = NP('AppUpdate'); if (!AUp || updAsked) return;
+  let info; try { info = await AUp.getAppUpdateInfo(); } catch(e) { return; }   // instalada fuera de Play o sin conexión: no se avisa
+  if (!info || info.updateAvailability !== 2) return;
+  const busy = bkEl.style.display === 'flex' || !menuShown || (typeof introPhase !== 'undefined' && introPhase);
+  if (busy) { if ((tries || 0) < 40) setTimeout(() => checkAppUpdate((tries || 0) + 1), 3000); return; }   // espera a estar en el menú, sin otro cartel abierto
+  updAsked = true;
+  bkEl.innerHTML = `<div class="box" style="text-align:center"><h3>⬆ ${LX('HAY UNA VERSIÓN NUEVA', 'NEW VERSION AVAILABLE')}</h3>
+    <p>${LX('Actualizá Drift Loop para tener las últimas mejoras. Tu progreso no se pierde.', 'Update Drift Loop to get the latest improvements. Your progress is kept.')}</p>
+    <div class="row"><button data-b="no">${LX('DESPUÉS', 'LATER')}</button><button class="go" data-b="ok">${LX('ACTUALIZAR', 'UPDATE')}</button></div></div>`;
+  bkEl.style.display = 'flex';
+  bkEl.querySelector('[data-b=no]').onclick = () => { bkEl.style.display = 'none'; };
+  bkEl.querySelector('[data-b=ok]').onclick = async () => { bkEl.style.display = 'none';
+    try { if (info.immediateUpdateAllowed) await AUp.performImmediateUpdate(); else await AUp.openAppStore(); }
+    catch(e) { try { await AUp.openAppStore(); } catch(_) {} } };
+}
+setTimeout(() => checkAppUpdate(0), 4000);   // al abrir el juego
+document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(() => checkAppUpdate(0), 1500); });   // al volver al juego
 // ---- evento semanal ----
 var eventMode = false, GRIP_MOD = 1;
 const EVT_MODS = [
