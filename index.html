@@ -1750,12 +1750,44 @@ var slowHits = [], bakedNow = false;
 // ---- diagnóstico oculto (tocar 5 veces el logo del menú): números reales del celular para ajustar el rendimiento ----
 let DIAG = false, diagTaps = [], diagEl = null, diagD = { n: 0, ft: 0, rt: 0, mx: 0, slow: 0, t0: 0 };
 function diagToggle() { DIAG = !DIAG; if (!diagEl) { diagEl = document.createElement('div'); diagEl.style.cssText = 'position:fixed;left:6px;top:42px;z-index:99;pointer-events:none;background:rgba(0,0,0,.78);color:#7CFF9B;font:600 12px/1.35 monospace;padding:6px 8px;border-radius:6px;white-space:pre;max-width:92vw'; document.body.appendChild(diagEl); }
-  diagEl.style.display = DIAG ? 'block' : 'none'; diagD = { n: 0, ft: 0, rt: 0, mx: 0, slow: 0, t0: performance.now() }; if (DIAG) diagEl.textContent = 'midiendo…'; }
+  diagEl.style.display = DIAG ? 'block' : 'none'; diagD = { n: 0, ft: 0, rt: 0, mx: 0, slow: 0, t0: performance.now() }; if (DIAG) { diagEl.textContent = 'midiendo…'; benchRes = ''; benchRaceDone = false; setTimeout(() => { if (DIAG) benchStart(); }, 1500); } }
+// prueba automática (con el diagnóstico abierto): mide imágenes por segundo apagando una cosa por vez, para saber qué traba en cada celular
+let BENCH = null, benchRes = '', benchRaceDone = false;
+const BENCH_MODES = [
+  ['normal', null],
+  ['sin dibujar', 'skip'],
+  ['sin clima/noche', ['drawNight', 'drawWeatherOverlay', 'drawLensRain', 'drawLiveWet']],
+  ['sin efectos', ['drawPost', 'drawBloom', 'drawSpeedBlur', 'drawSheen', 'drawParts', 'drawNeon', 'drawFX']],
+  ['sin carteles', ['drawHUD', 'drawTags', 'drawBanners']],
+  ['sin sonido', 'mute'],
+  ['sin tope 30', 'nolock'],
+];
+function benchStart() { if (BENCH) return; BENCH = { i: -1, t0: 0, n: 0, js: 0, res: [], stub: {}, lock: LOCK30 }; benchRes = 'probando…'; benchNext(performance.now()); }
+function benchUndo() {
+  const B = BENCH; for (const k in B.stub) window[k] = B.stub[k]; B.stub = {};
+  LOCK30 = B.lock; try { if (B.muted && AUPREP.ac) AUPREP.ac.resume(); } catch(e) {} B.muted = false;
+}
+function benchNext(now) {
+  const B = BENCH; benchUndo(); B.i++;
+  if (B.i >= BENCH_MODES.length) { benchRes = B.res.join('\n'); BENCH = null; return; }
+  const m = BENCH_MODES[B.i][1];
+  if (Array.isArray(m)) for (const k of m) if (typeof window[k] === 'function') { B.stub[k] = window[k]; window[k] = function () {}; }
+  if (m === 'mute') try { if (AUPREP.ac) { AUPREP.ac.suspend(); B.muted = true; } } catch(e) {}
+  if (m === 'nolock') LOCK30 = false;
+  B.t0 = now; B.n = 0; B.js = 0;
+  benchRes = 'probando ' + (B.i + 1) + '/' + BENCH_MODES.length + ': ' + BENCH_MODES[B.i][0] + '…';
+}
+function benchTick(now, js) {
+  const B = BENCH, el = now - B.t0; if (el < 600) return;   // descarta el arranque de cada prueba
+  B.n++; B.js += js;
+  if (el > 2600) { const sec = (el - 600)/1000; B.res.push(BENCH_MODES[B.i][0] + ': ' + (B.n/sec).toFixed(0) + ' img/s  js ' + (B.js/Math.max(1, B.n)).toFixed(1) + 'ms'); benchNext(now); }
+}
 function diagTick(raw, rms) {
   const d = diagD; d.n++; d.ft += raw*1000; d.rt += rms; d.mx = Math.max(d.mx, raw*1000); if (raw > 0.05) d.slow++;
   const now = performance.now(); if (now - d.t0 < 1000) return;
   const sec = (now - d.t0)/1000;
   diagEl.textContent = `img/s ${(d.n/sec).toFixed(0)}  peor ${d.mx.toFixed(0)}ms  lentas ${d.slow}\ndibujo ${(d.rt/d.n).toFixed(1)}ms  auto ${((d.ht||0)/d.n).toFixed(1)}ms  bloque ${bakeMs.toFixed(0)}ms\ncalidad ${QUAL}${LOCK30 ? ' 30fijo' : ''}  efectos ${FXL}  res ${DPR.toFixed(2)}\nlienzo ${cv.width}x${cv.height}  bloques ${tiles.size}/${tileCap()}  nit ${TSC}\nmem ${(TILE_MEM/1048576)|0}MB  ${state}  ${(WX && WX.name) || ''}\nv${APP_VER || 'web'}  ${navigator.deviceMemory || '?'}GB ${navigator.hardwareConcurrency || '?'}núcleos  ${devicePixelRatio}x  ${innerWidth}x${innerHeight}`;
+  if (benchRes) diagEl.textContent += '\n— prueba (' + state + ') —\n' + benchRes;
   diagD = { n: 0, ft: 0, rt: 0, mx: 0, slow: 0, t0: now };
 }
 function processBake(budgetMs) {
@@ -5094,7 +5126,7 @@ function heroLoop(now) {
   if (!menuShown) return;
   const cvh = mEl.querySelector('#mHero');
   if (cvh) {
-    const dpr = Math.min(2, devicePixelRatio || 1), w = cvh.clientWidth, h = cvh.clientHeight;
+    const dpr = Math.min(QUAL >= 2 ? 1.25 : 2, devicePixelRatio || 1), w = cvh.clientWidth, h = cvh.clientHeight;
     if (w > 0 && h > 0) {
       if (cvh.width !== Math.round(w*dpr) || cvh.height !== Math.round(h*dpr)) { cvh.width = Math.round(w*dpr); cvh.height = Math.round(h*dpr); }
       const g = cvh.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
@@ -8289,12 +8321,12 @@ function frame(now) {
   if (now - ecoLast < (ECO || LOCK30 ? 30 : 13.3)) { requestAnimationFrame(frame); return; }   // tope de 60 parejo (en 120 Hz o frecuencia variable el ritmo desparejo se ve a saltos); ahorro: 30
   { const ml = state === 'menu'; if (ml !== menuLo) { menuLo = ml; resize(); postCanvas = null; } }
   if (ADS.busy) { last = now; requestAnimationFrame(frame); return; }   // con el anuncio en pantalla el juego no dibuja nada
-  ecoLast = now;
+  ecoLast = now; const fj0 = performance.now();
   const raw = Math.max(0, (now - last)/1000); let dt = Math.min(0.1, raw); last = Math.max(last, now);   // si el celular dibuja pocos cuadros, el juego igual va a velocidad real (ver pasos abajo)
   if (tut && !paused) dt *= tutTick(dt);
   if (slowT > 0 && !paused) { slowT -= raw; dt *= 0.32; }   // cámara lenta al cruzar la meta
   if (hitStop > 0 && !paused) { hitStop -= raw; dt *= 0.04; }   // micro-pausa en un choque fuerte
-  try { if (introPhase) introTick(dt); if (!paused) { const ns = Math.max(1, Math.ceil(dt/0.034 - 1e-6)); for (let i = 0; i < ns && !paused; i++) { update(dt/ns); if (ttMode) ttTick(); if (licMode) licTick(); } } { const r0 = performance.now(); render(); if (DIAG) diagTick(raw, performance.now() - r0); } try { musicTick(); } catch(e) {} }
+  try { if (introPhase) introTick(dt); if (!paused) { const ns = Math.max(1, Math.ceil(dt/0.034 - 1e-6)); for (let i = 0; i < ns && !paused; i++) { update(dt/ns); if (ttMode) ttTick(); if (licMode) licTick(); } } { const r0 = performance.now(); if (!(BENCH && BENCH_MODES[BENCH.i][1] === 'skip')) render(); if (DIAG) diagTick(raw, performance.now() - r0); } try { musicTick(); } catch(e) {} }
   catch (e) { errCount++; lastErr = String(e && e.message || e); lastErrT = performance.now(); if (errCount < 5) console.error(e); try { ctx.restore(); ctx.restore(); } catch(_) {} }
   syncMenu(dt); syncRes(dt);
   if (menuShown) { const h0 = performance.now(); try { heroLoop(now); } catch(_) {} if (DIAG) diagD.ht = (diagD.ht || 0) + performance.now() - h0; }
@@ -8302,13 +8334,13 @@ function frame(now) {
   // calidad automática: mide de a 1 segundo; si no llega a 60 parejos, primero apaga efectos y después baja resolución y detalle
   perfT += raw;
   // emergencia: varias imágenes muy lentas seguidas (en cualquier pantalla) = el celular no da abasto; antes se ignoraban y la calidad nunca bajaba
-  if (!paused && !document.hidden && perfT > 1.5 && raw > 0.12 && raw < 3 && (state === 'race' || state === 'countdown')) {
+  if (!BENCH && !paused && !document.hidden && perfT > 1.5 && raw > 0.12 && raw < 3 && (state === 'race' || state === 'countdown')) {
     slowHits = slowHits.filter(t => now - t < 3000); slowHits.push(now);
     if (slowHits.length >= 3 && !LOCK30) { slowHits = []; while (fxDown()) {} if (QUAL < 3) { QUAL = 3; qualSave(); resize(); postCanvas = null; const t = tscFor(3); if (TSC > t) TSC = t; }
       else LOCK30 = true;
       TILE_MEM = Math.min(TILE_MEM, 32*1048576); clearTiles(); if (state === 'countdown' || state === 'race') preloadTrackTiles(); perfAcc = 0; perfN = 0; }
   }
-  if (perfT > 1 && !bakedNow && raw < 0.25 && !paused && (state === 'race' || state === 'countdown' || state === 'finish')) {
+  if (!BENCH && perfT > 1 && !bakedNow && raw < 0.25 && !paused && (state === 'race' || state === 'countdown' || state === 'finish')) {
     perfAcc += raw; perfN++;
     if (perfAcc > 1 || (perfAcc > 0.5 && perfAcc/perfN > 0.033)) {   // si va a los tirones, reacciona en medio segundo
       const avg = perfAcc/perfN - (ECO ? 0.0167 : 0), strict = QSET !== 'maxima', bad = avg > 0.033;   // en Ahorro (30 cuadros) se descuenta la espera propia
@@ -8321,6 +8353,8 @@ function frame(now) {
     }
   }
   bakedNow = false;
+  if (BENCH) benchTick(now, performance.now() - fj0);
+  else if (DIAG && !benchRaceDone && state === 'race' && stateT > 3) { benchRaceDone = true; benchStart(); }
   requestAnimationFrame(frame);
 }
 try { if (!introSeen() && localStorage.getItem('driftloop_champgo') !== '1') showSplash(); else introMark(); } catch(e) {}
