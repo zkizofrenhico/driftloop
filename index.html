@@ -4929,8 +4929,8 @@ function pRender() {
   if (inRace) { const n = document.createElement('div'); n.className = 'note'; n.textContent = 'Los cambios de "Próxima carrera" se aplican al reiniciar o en la siguiente carrera.'; q('#pRace').appendChild(n); }
   { const v = document.createElement('div'); v.className = 'note'; v.style.cssText = 'text-align:center;opacity:.6;margin:14px 0 4px'; v.textContent = LX('Versión ', 'Version ') + (APP_VER || 'web'); pEl.querySelector('.wrap, .in, div').appendChild(v); }   // para saber qué versión tiene cada celular
 }
-let APP_VER = '';   // ej. "1.5 (167)": el número entre paréntesis cambia en cada versión
-if (NATIVE) { try { const A = NP('App'); A && A.getInfo().then(i => { APP_VER = i.version + ' (' + i.build + ')'; }).catch(() => {}); } catch(e) {} }
+let APP_VER = '';   // ej. "1.5.171": el número entre paréntesis cambia en cada versión
+if (NATIVE) { try { const A = NP('App'); A && A.getInfo().then(i => { APP_VER = String(i.version).indexOf(String(i.build)) >= 0 ? String(i.version) : i.version + ' (' + i.build + ')'; }).catch(() => {}); } catch(e) {} }
 addEventListener('resize', () => { if (paused) { pEl.style.left = Math.round((innerWidth - W)/2) + 'px'; pEl.style.width = W + 'px'; } });
 document.addEventListener('visibilitychange', () => { if (document.hidden && typeof introPhase !== 'undefined' && introPhase === 'play') { endIntro(true); return; } if (document.hidden && (state === 'race' || state === 'countdown')) openPause(false); });
 applySettings();
