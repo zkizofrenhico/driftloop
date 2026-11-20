@@ -7950,9 +7950,12 @@ function openCloud() {
 async function deleteAccountData() {
   if (!fbAuth || !fbAuth.uid) return true;
   const tk = await fbToken(), uid = fbAuth.uid;
-  const del = path => fbFetch(FS_BASE + path, { method: 'DELETE', headers: { Authorization: 'Bearer ' + tk } })
-    .then(r => { if (!r.ok && r.status !== 404) { const e = new Error('del ' + r.status); e.status = r.status; throw e; } });
-  for (const L of [LG_WORLD].concat(prof.leagues || [])) await Promise.all(TRACK_KEYS.map(k => del(`/leagues/${L.code}/times/${uid}_${k}`)));
+  const del1 = path => fbFetch(FS_BASE + path, { method: 'DELETE', headers: { Authorization: 'Bearer ' + tk } })
+    .then(r => { if (!r.ok && r.status !== 404) { const e = new Error('del ' + r.status); e.status = r.status; e.what = path.split('/')[1]; throw e; } });
+  const del = path => del1(path).catch(e => e.status === 403 ? Promise.reject(e) : new Promise(r => setTimeout(r, 600)).then(() => del1(path)));   // un reintento si falla la red
+  const paths = [];
+  for (const L of [LG_WORLD].concat(prof.leagues || [])) for (const k of TRACK_KEYS) paths.push(`/leagues/${L.code}/times/${uid}_${k}`);
+  for (let i = 0; i < paths.length; i += 6) await Promise.all(paths.slice(i, i + 6).map(del));   // de a 6, para no saturar la conexión
   await del(`/saves/${uid}`);
   let gone = false;
   try { const r = await fbFetch('https://identitytoolkit.googleapis.com/v1/accounts:delete?key=' + FB.key, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken: tk }) }); gone = r.ok; } catch(e) {}
@@ -7974,7 +7977,10 @@ function openDeleteAccount() {
       const gone = await deleteAccountData();
       msg.style.color = '#3dff8a'; msg.textContent = gone ? '✓ Listo: tu cuenta y tus datos online se borraron.' : 'Tus datos online se borraron. Para borrar también la cuenta vacía, escribí al contacto de la política de privacidad.';
       b.style.display = 'none'; bkEl.querySelector('[data-b=close]').textContent = 'CERRAR';
-    } catch(e) { b.disabled = false; msg.style.color = '#ff8a7a'; msg.textContent = 'No se pudo borrar. Revisá la conexión y probá de nuevo.'; }
+    } catch(e) { b.disabled = false; msg.style.color = '#ff8a7a';
+      msg.textContent = e && e.status === 403 ? LX('Firebase no dejó borrar ' + (e.what === 'saves' ? 'la partida guardada' : 'los tiempos del ránking') + ' (permiso denegado). Hay que actualizar las reglas de Firestore.', 'Firebase did not allow deleting ' + (e.what === 'saves' ? 'the saved game' : 'the ranking times') + ' (permission denied). The Firestore rules need updating.')
+        : e && e.status ? LX('No se pudo borrar (error ' + e.status + '). Probá de nuevo en un rato.', 'Could not delete (error ' + e.status + '). Try again later.')
+        : 'No se pudo borrar. Revisá la conexión y probá de nuevo.'; }
   };
 }
 function cloudRowHTML() {
