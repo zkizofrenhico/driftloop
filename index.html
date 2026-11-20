@@ -617,7 +617,7 @@ function worldPos(s, d, o) { sample(s, o); o.wx = o.x - o.ty*d; o.wy = o.y + o.t
    ===================================================================== */
 const cv = document.getElementById('c'), ctx = cv.getContext('2d', { alpha: false }) || cv.getContext('2d');
 let W = 0, H = 0, DPR = 1, QUAL = 0, menuLo = false;
-function qualSave() { try { localStorage.setItem('driftloop_ql2', QUAL + '|' + Date.now()); } catch(e) {} }
+function qualSave() { try { localStorage.setItem('driftloop_ql3', QUAL + '|' + Date.now()); } catch(e) {} }
 // Calidad: 'auto' (por defecto) mira el equipo y se va ajustando sola · 'maxima' y 'ahorro' solo si el jugador las elige
 const QSET = (function () { try { const p = JSON.parse(localStorage.getItem('driftloop_profile')); if (p && p.set && p.set.qv === 3 && p.set.quality) return p.set.quality; } catch(e) {} return 'auto'; })();
 const DEV_HI = (navigator.deviceMemory || 4) >= 8 && (navigator.hardwareConcurrency || 4) >= 8;      // gama alta
@@ -637,8 +637,8 @@ function resize() {
 }
 // nivel con el que arranca: el que quedó guardado (una vez por día prueba uno mejor) o, la primera vez, según el equipo
 if (!ECO) (function () { try {
-  try { localStorage.removeItem('driftloop_ql'); } catch(_) {}   // la vieja podía haber quedado baja por error
-  const pp = String(localStorage.getItem('driftloop_ql2') || '').split('|'), q = +pp[0], at = +pp[1] || 0;
+  try { ['driftloop_ql', 'driftloop_ql2', 'driftloop_fxl'].forEach(k => localStorage.removeItem(k)); } catch(_) {}   // la vieja podía haber quedado baja por error
+  const pp = String(localStorage.getItem('driftloop_ql3') || '').split('|'), q = +pp[0], at = +pp[1] || 0;
   if (pp[0] !== '' && q >= 0 && q <= 3) { QUAL = q; if (q > 0 && Date.now() - at > 86400000) { QUAL = q - 1; qualSave(); } }
   else QUAL = DEV_LO ? 1 : 0;
 } catch(e) {} })();
@@ -670,12 +670,12 @@ const SUN = { x: 0.78, y: 1.04 };            // dirección de las sombras en el 
    ===================================================================== */
 var FXL = (function () {
   try { const q = (JSON.parse(localStorage.getItem('driftloop_profile')) || {}).set || {}; if (q.qv === 3 && q.quality === 'ahorro') return 1;
-        const pp = String(localStorage.getItem('driftloop_fxl') || '').split('|'), cap = +pp[0], at = +pp[1] || 0;
+        const pp = String(localStorage.getItem('driftloop_fxl2') || '').split('|'), cap = +pp[0], at = +pp[1] || 0;
         if (!(cap >= 1 && cap <= 3)) return ((navigator.deviceMemory || 4) <= 3 || (navigator.hardwareConcurrency || 4) <= 4) ? 2 : 3;
-        if (cap < 3 && Date.now() - at > 3*86400000) { localStorage.setItem('driftloop_fxl', (cap + 1) + '|' + Date.now()); return cap + 1; }   // cada 3 días prueba un escalón más
+        if (cap < 3 && Date.now() - at > 3*86400000) { localStorage.setItem('driftloop_fxl2', (cap + 1) + '|' + Date.now()); return cap + 1; }   // cada 3 días prueba un escalón más
         return cap; } catch(e) { return 3; }
 })();
-function fxDown() { if (FXL <= 1) return false; FXL--; try { localStorage.setItem('driftloop_fxl', FXL + '|' + Date.now()); } catch(e) {} return true; }
+function fxDown() { if (FXL <= 1) return false; FXL--; try { localStorage.setItem('driftloop_fxl2', FXL + '|' + Date.now()); } catch(e) {} return true; }
 // ---- brillo: lo más claro de la imagen se difumina y se suma encima ----
 let bloomC = null, bloomG = null;
 const BLOOM_OK = (function () { try { const g = document.createElement('canvas').getContext('2d'); return 'filter' in g; } catch(e) { return false; } })();
@@ -4926,7 +4926,7 @@ function pRender() {
   row('#pRace', 'Rivales', '', seg('rivals', [[3, '3'], [5, '5'], [7, '7']], applySettings));
   row('#pRace', 'Dificultad', champRace ? 'En las copas no se usa: cada copa tiene la suya' : 'Carrera libre y modos. Las copas tienen la suya', seg('diff', Object.entries(DIFFS).map(([k, v]) => [k, v[0]]), applySettings));
   if (!inRace) row('#pGame', 'Idioma', '🌐', seg('lang', [['auto', 'Auto'], ['es', 'Español'], ['en', 'English']], () => { saveProf(); location.reload(); }));
-  row('#pGfx', 'Calidad', 'Se aplica al volver a abrir el juego. Ahorro = menos batería', seg('quality', [['maxima', 'Máxima'], ['auto', 'Auto'], ['ahorro', 'Ahorro']], () => { try { localStorage.removeItem('driftloop_fxl'); localStorage.removeItem('driftloop_ql2'); } catch(e) {} }));
+  row('#pGfx', 'Calidad', 'Se aplica al volver a abrir el juego. Ahorro = menos batería', seg('quality', [['maxima', 'Máxima'], ['auto', 'Auto'], ['ahorro', 'Ahorro']], () => { try { localStorage.removeItem('driftloop_fxl2'); localStorage.removeItem('driftloop_ql3'); } catch(e) {} }));
   if (inRace) { const n = document.createElement('div'); n.className = 'note'; n.textContent = 'Los cambios de "Próxima carrera" se aplican al reiniciar o en la siguiente carrera.'; q('#pRace').appendChild(n); }
   { const v = document.createElement('div'); v.className = 'note'; v.style.cssText = 'text-align:center;opacity:.6;margin:14px 0 4px'; v.textContent = LX('Versión ', 'Version ') + (APP_VER || 'web'); pEl.querySelector('.wrap, .in, div').appendChild(v); }   // para saber qué versión tiene cada celular
 }
@@ -7887,7 +7887,7 @@ function cloudPayload() {
   const data = {}, ghosts = {};
   for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (!k || k.indexOf('driftloop_') !== 0) continue;
     if (k.indexOf('driftloop_ghost_') === 0) { if (k.indexOf('diaria') < 0) try { const g = JSON.parse(localStorage.getItem(k)); if (g && g.d) { const d = g.half ? [].concat(...g.d.map(r => [r, r])) : g.d; ghosts[k.slice(16)] = { t: g.t, model: g.model, L: g.L, e: encodeGhostData(d) }; } } catch(e) {} }
-    else if (k.indexOf('driftloop_rival_') !== 0 && !/^driftloop_(fb|cloudsync|daily_trk|fxl|did|ql|ql2)$/.test(k) && !/go$/.test(k)) data[k] = localStorage.getItem(k); }
+    else if (k.indexOf('driftloop_rival_') !== 0 && !/^driftloop_(fb|cloudsync|daily_trk|fxl|fxl2|did|ql|ql2|ql3)$/.test(k) && !/go$/.test(k)) data[k] = localStorage.getItem(k); }
   return JSON.stringify({ v: 1, data, ghosts, did: DEV_ID, la: prof.savedAt || 0 });
 }
 function cloudApply(raw) {
@@ -7898,7 +7898,7 @@ function cloudApply(raw) {
     if (mine.qv) np.set.qv = mine.qv; else delete np.set.qv;
     p.data.driftloop_profile = JSON.stringify(np);
   } catch(e) {}
-  for (const k in p.data) if (!/^driftloop_ql2?$/.test(k) && k !== 'driftloop_fxl') localStorage.setItem(k, p.data[k]);   // calidad aprendida: de cada celular
+  for (const k in p.data) if (!/^driftloop_(ql\d?|fxl\d?)$/.test(k)) localStorage.setItem(k, p.data[k]);   // calidad aprendida: de cada celular
   for (const k in p.ghosts || {}) { const g = p.ghosts[k]; localStorage.setItem('driftloop_ghost_' + k, JSON.stringify({ t: g.t, model: g.model, L: g.L, d: decodeGhostData(g.e), half: 1 })); }
 }
 async function cloudPush() {
@@ -8317,7 +8317,7 @@ function showErr() {
   try { ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.fillStyle = 'rgba(0,0,0,.75)'; ctx.fillRect(0, H - 92, W, 22);
     ctx.fillStyle = '#ff8a7a'; ctx.font = '11px sans-serif'; ctx.textAlign = 'left'; ctx.fillText('Error: ' + lastErr.slice(0, 70), 8, H - 77); } catch(_) {}
 }
-let ecoLast = 0;
+let ecoLast = 0, jsEma = 0, goodT = 0;
 function frame(now) {
   if (now - ecoLast < (ECO || LOCK30 ? 30 : 13.3)) { requestAnimationFrame(frame); return; }   // tope de 60 parejo (en 120 Hz o frecuencia variable el ritmo desparejo se ve a saltos); ahorro: 30
   { const ml = state === 'menu'; if (ml !== menuLo) { menuLo = ml; resize(); postCanvas = null; } }
@@ -8334,8 +8334,19 @@ function frame(now) {
   showErr();
   // calidad automática: mide de a 1 segundo; si no llega a 60 parejos, primero apaga efectos y después baja resolución y detalle
   perfT += raw;
+  { const j = performance.now() - fj0; jsEma = jsEma ? jsEma*0.95 + j*0.05 : j; }
+  // solo se baja la calidad si el juego de verdad trabaja mucho por imagen; si el celular va lento por otra cosa (el sistema, otra app), bajar la resolución no ayuda y solo se ve feo
+  const heavy = jsEma > 9;
+  // y se recupera sola: si el juego trabaja poco, vuelve a subir
+  if (!BENCH && !paused && (state === 'race' || state === 'menu') && (LOCK30 || QUAL > (DEV_LO ? 1 : 0) || FXL < 3) && jsEma < 4.5 && raw < 0.05) {
+    goodT += raw;
+    if (goodT > 2.5) { goodT = 0; perfAcc = 0; perfN = 0;
+      if (LOCK30) LOCK30 = false;
+      else if (QUAL > (DEV_LO ? 1 : 0)) { QUAL--; qualSave(); resize(); postCanvas = null; const t = tscFor(QUAL); if (TSC < t) { TSC = t; clearTiles(); if (state === 'race') preloadTrackTiles(); } }
+      else if (FXL < 3 && !ECO) { FXL++; try { localStorage.setItem('driftloop_fxl2', FXL + '|' + Date.now()); } catch(e) {} } }
+  } else if (jsEma >= 4.5) goodT = 0;
   // emergencia: varias imágenes muy lentas seguidas (en cualquier pantalla) = el celular no da abasto; antes se ignoraban y la calidad nunca bajaba
-  if (!BENCH && !paused && !document.hidden && perfT > 1.5 && raw > 0.12 && raw < 3 && (state === 'race' || state === 'countdown')) {
+  if (!BENCH && !paused && !document.hidden && perfT > 1.5 && raw > 0.12 && raw < 3 && heavy && (state === 'race' || state === 'countdown')) {
     slowHits = slowHits.filter(t => now - t < 3000); slowHits.push(now);
     if (slowHits.length >= 3 && !LOCK30) { slowHits = []; while (fxDown()) {} if (QUAL < 3) { QUAL = 3; qualSave(); resize(); postCanvas = null; const t = tscFor(3); if (TSC > t) TSC = t; }
       else LOCK30 = true;
@@ -8344,12 +8355,12 @@ function frame(now) {
   if (!BENCH && perfT > 1 && !bakedNow && raw < 0.25 && !paused && (state === 'race' || state === 'countdown' || state === 'finish')) {
     perfAcc += raw; perfN++;
     if (perfAcc > 1 || (perfAcc > 0.5 && perfAcc/perfN > 0.033)) {   // si va a los tirones, reacciona en medio segundo
-      const avg = perfAcc/perfN - (ECO ? 0.0167 : 0), strict = QSET !== 'maxima', bad = avg > 0.033;   // en Ahorro (30 cuadros) se descuenta la espera propia
+      const avg = perfAcc/perfN - (ECO ? 0.0167 : 0), strict = QSET !== 'maxima', bad = avg > 0.033 && heavy;   // en Ahorro (30 cuadros) se descuenta la espera propia
       const qDown = n => { QUAL = Math.min(3, QUAL + n); qualSave(); resize(); postCanvas = null; const t = tscFor(QUAL); if (TSC > t) { TSC = t; clearTiles(); preloadTrackTiles(); } };
       if (LOCK30) { /* ya está en lo mínimo */ }
       else if (bad) { while (fxDown()) {} if (QUAL < 3) qDown(avg > 0.05 ? 2 : 1); else LOCK30 = true; }   // va a los tirones: baja todo de una
-      else if (avg > (strict ? 0.019 : 0.021) && fxDown()) { /* primero se apagan efectos */ }
-      else if (avg > (strict ? 0.0205 : 0.024) && QUAL < (strict ? 3 : 2)) qDown(1);
+      else if (heavy && avg > (strict ? 0.019 : 0.021) && fxDown()) { /* primero se apagan efectos */ }
+      else if (heavy && avg > (strict ? 0.0205 : 0.024) && QUAL < (strict ? 3 : 2)) qDown(1);
       perfAcc = 0; perfN = 0;
     }
   }
