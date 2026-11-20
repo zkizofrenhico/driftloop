@@ -1754,7 +1754,7 @@ function diagTick(raw, rms) {
   const d = diagD; d.n++; d.ft += raw*1000; d.rt += rms; d.mx = Math.max(d.mx, raw*1000); if (raw > 0.05) d.slow++;
   const now = performance.now(); if (now - d.t0 < 1000) return;
   const sec = (now - d.t0)/1000;
-  diagEl.textContent = `img/s ${(d.n/sec).toFixed(0)}  peor ${d.mx.toFixed(0)}ms  lentas ${d.slow}\ndibujo ${(d.rt/d.n).toFixed(1)}ms  bloque ${bakeMs.toFixed(0)}ms\ncalidad ${QUAL}${LOCK30 ? ' 30fijo' : ''}  efectos ${FXL}  res ${DPR.toFixed(2)}\nlienzo ${cv.width}x${cv.height}  bloques ${tiles.size}/${tileCap()}  nit ${TSC}\nmem ${(TILE_MEM/1048576)|0}MB  ${state}  ${(WX && WX.name) || ''}\n${navigator.deviceMemory || '?'}GB ${navigator.hardwareConcurrency || '?'}núcleos  ${devicePixelRatio}x  ${innerWidth}x${innerHeight}`;
+  diagEl.textContent = `img/s ${(d.n/sec).toFixed(0)}  peor ${d.mx.toFixed(0)}ms  lentas ${d.slow}\ndibujo ${(d.rt/d.n).toFixed(1)}ms  bloque ${bakeMs.toFixed(0)}ms\ncalidad ${QUAL}${LOCK30 ? ' 30fijo' : ''}  efectos ${FXL}  res ${DPR.toFixed(2)}\nlienzo ${cv.width}x${cv.height}  bloques ${tiles.size}/${tileCap()}  nit ${TSC}\nmem ${(TILE_MEM/1048576)|0}MB  ${state}  ${(WX && WX.name) || ''}\nv${APP_VER || 'web'}  ${navigator.deviceMemory || '?'}GB ${navigator.hardwareConcurrency || '?'}núcleos  ${devicePixelRatio}x  ${innerWidth}x${innerHeight}`;
   diagD = { n: 0, ft: 0, rt: 0, mx: 0, slow: 0, t0: now };
 }
 function processBake(budgetMs) {
@@ -4894,7 +4894,10 @@ function pRender() {
   if (!inRace) row('#pGame', 'Idioma', '🌐', seg('lang', [['auto', 'Auto'], ['es', 'Español'], ['en', 'English']], () => { saveProf(); location.reload(); }));
   row('#pGfx', 'Calidad', 'Se aplica al volver a abrir el juego. Ahorro = menos batería', seg('quality', [['maxima', 'Máxima'], ['auto', 'Auto'], ['ahorro', 'Ahorro']], () => { try { localStorage.removeItem('driftloop_fxl'); localStorage.removeItem('driftloop_ql'); } catch(e) {} }));
   if (inRace) { const n = document.createElement('div'); n.className = 'note'; n.textContent = 'Los cambios de "Próxima carrera" se aplican al reiniciar o en la siguiente carrera.'; q('#pRace').appendChild(n); }
+  { const v = document.createElement('div'); v.className = 'note'; v.style.cssText = 'text-align:center;opacity:.6;margin:14px 0 4px'; v.textContent = LX('Versión ', 'Version ') + (APP_VER || 'web'); pEl.querySelector('.wrap, .in, div').appendChild(v); }   // para saber qué versión tiene cada celular
 }
+let APP_VER = '';   // ej. "1.5 (167)": el número entre paréntesis cambia en cada versión
+if (NATIVE) { try { const A = NP('App'); A && A.getInfo().then(i => { APP_VER = i.version + ' (' + i.build + ')'; }).catch(() => {}); } catch(e) {} }
 addEventListener('resize', () => { if (paused) { pEl.style.left = Math.round((innerWidth - W)/2) + 'px'; pEl.style.width = W + 'px'; } });
 document.addEventListener('visibilitychange', () => { if (document.hidden && typeof introPhase !== 'undefined' && introPhase === 'play') { endIntro(true); return; } if (document.hidden && (state === 'race' || state === 'countdown')) openPause(false); });
 applySettings();
