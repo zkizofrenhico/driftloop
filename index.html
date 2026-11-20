@@ -8317,7 +8317,7 @@ function showErr() {
   try { ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.fillStyle = 'rgba(0,0,0,.75)'; ctx.fillRect(0, H - 92, W, 22);
     ctx.fillStyle = '#ff8a7a'; ctx.font = '11px sans-serif'; ctx.textAlign = 'left'; ctx.fillText('Error: ' + lastErr.slice(0, 70), 8, H - 77); } catch(_) {}
 }
-let ecoLast = 0, jsEma = 0, goodT = 0;
+let ecoLast = 0, jsEma = 0, goodT = 0, qPrev = -1, qNoUp = false;
 function frame(now) {
   if (now - ecoLast < (ECO || LOCK30 ? 30 : 13.3)) { requestAnimationFrame(frame); return; }   // tope de 60 parejo (en 120 Hz o frecuencia variable el ritmo desparejo se ve a saltos); ahorro: 30
   { const ml = state === 'menu'; if (ml !== menuLo) { menuLo = ml; resize(); postCanvas = null; } }
@@ -8334,16 +8334,18 @@ function frame(now) {
   showErr();
   // calidad automática: mide de a 1 segundo; si no llega a 60 parejos, primero apaga efectos y después baja resolución y detalle
   perfT += raw;
-  { const j = performance.now() - fj0; jsEma = jsEma ? jsEma*0.95 + j*0.05 : j; }
+  if (!bakedNow) { const j = performance.now() - fj0; jsEma = jsEma ? jsEma*0.95 + j*0.05 : j; }   // las imágenes que arman pista nueva no cuentan (son picos aislados)
+  { const qsc = (LOCK30 ? 100 : 0) + QUAL*10 + (3 - FXL); if (qPrev >= 0 && qsc > qPrev) qNoUp = true; qPrev = qsc; }   // si bajó por carga real, en esta sesión no vuelve a subir (nada de sube y baja)
   // solo se baja la calidad si el juego de verdad trabaja mucho por imagen; si el celular va lento por otra cosa (el sistema, otra app), bajar la resolución no ayuda y solo se ve feo
   const heavy = jsEma > 9;
   // y se recupera sola: si el juego trabaja poco, vuelve a subir
-  if (!BENCH && !paused && (state === 'race' || state === 'menu') && (LOCK30 || QUAL > (DEV_LO ? 1 : 0) || FXL < 3) && jsEma < 4.5 && raw < 0.05) {
+  if (!qNoUp && !BENCH && !paused && (state === 'race' || state === 'menu') && (LOCK30 || QUAL > (DEV_LO ? 1 : 0) || FXL < 3) && jsEma < 4.5 && raw < 0.05) {
     goodT += raw;
-    if (goodT > 2.5) { goodT = 0; perfAcc = 0; perfN = 0;
+    if (goodT > 4) { goodT = 0; perfAcc = 0; perfN = 0;
       if (LOCK30) LOCK30 = false;
       else if (QUAL > (DEV_LO ? 1 : 0)) { QUAL--; qualSave(); resize(); postCanvas = null; const t = tscFor(QUAL); if (TSC < t) { TSC = t; clearTiles(); if (state === 'race') preloadTrackTiles(); } }
-      else if (FXL < 3 && !ECO) { FXL++; try { localStorage.setItem('driftloop_fxl2', FXL + '|' + Date.now()); } catch(e) {} } }
+      else if (FXL < 3 && !ECO) { FXL++; try { localStorage.setItem('driftloop_fxl2', FXL + '|' + Date.now()); } catch(e) {} }
+      qPrev = (LOCK30 ? 100 : 0) + QUAL*10 + (3 - FXL); }
   } else if (jsEma >= 4.5) goodT = 0;
   // emergencia: varias imágenes muy lentas seguidas (en cualquier pantalla) = el celular no da abasto; antes se ignoraban y la calidad nunca bajaba
   if (!BENCH && !paused && !document.hidden && perfT > 1.5 && raw > 0.12 && raw < 3 && heavy && (state === 'race' || state === 'countdown')) {
