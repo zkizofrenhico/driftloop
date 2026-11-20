@@ -619,14 +619,14 @@ const cv = document.getElementById('c'), ctx = cv.getContext('2d', { alpha: fals
 let W = 0, H = 0, DPR = 1, QUAL = 0;
 function qualSave() { try { localStorage.setItem('driftloop_ql', QUAL + '|' + Date.now()); } catch(e) {} }
 // Calidad: 'auto' (por defecto) mira el equipo y se va ajustando sola · 'maxima' y 'ahorro' solo si el jugador las elige
-const QSET = (function () { try { const p = JSON.parse(localStorage.getItem('driftloop_profile')); if (p && p.set && p.set.qv === 2 && p.set.quality) return p.set.quality; } catch(e) {} return 'auto'; })();
+const QSET = (function () { try { const p = JSON.parse(localStorage.getItem('driftloop_profile')); if (p && p.set && p.set.qv === 3 && p.set.quality) return p.set.quality; } catch(e) {} return 'auto'; })();
 const DEV_HI = (navigator.deviceMemory || 4) >= 8 && (navigator.hardwareConcurrency || 4) >= 8;      // gama alta
 const DEV_LO = (navigator.deviceMemory || 4) <= 3 || (navigator.hardwareConcurrency || 4) <= 4;      // gama baja
 const AUTOQ = QSET === 'auto';
 const MAXQ = QSET === 'maxima' || (AUTOQ && DEV_HI);
 const ECO = QSET === 'ahorro';
 let LOCK30 = false;                                       // último recurso: 30 cuadros parejos en vez de ir a los saltos
-const QCAP = MAXQ ? [3, 2, 1.5, 1] : ECO ? [1.25, 1, 1, 0.75] : [2, 1.5, 1, 0.75];   // límite de resolución por nivel de calidad
+const QCAP = MAXQ ? [3, 2, 1.5, 1] : ECO ? [1.25, 1, 1, 0.6] : [2, 1.5, 1, 0.6];   // el último nivel es para celulares que no dan abasto: menos nitidez pero fluido   // límite de resolución por nivel de calidad
 function resize() {
   const vw = innerWidth, vh = innerHeight;
   W = vw > vh ? Math.round(vh*0.6) : vw; H = vh;   // en escritorio simula un celular vertical
@@ -667,7 +667,7 @@ const SUN = { x: 0.78, y: 1.04 };            // dirección de las sombras en el 
    FXL 3 = brillo (bloom), reflejo en la carrocería, gotas en la cámara · 2 = partículas de ambiente · 1 = base
    ===================================================================== */
 var FXL = (function () {
-  try { const q = (JSON.parse(localStorage.getItem('driftloop_profile')) || {}).set || {}; if (q.qv === 2 && q.quality === 'ahorro') return 1;
+  try { const q = (JSON.parse(localStorage.getItem('driftloop_profile')) || {}).set || {}; if (q.qv === 3 && q.quality === 'ahorro') return 1;
         const pp = String(localStorage.getItem('driftloop_fxl') || '').split('|'), cap = +pp[0], at = +pp[1] || 0;
         if (!(cap >= 1 && cap <= 3)) return ((navigator.deviceMemory || 4) <= 3 || (navigator.hardwareConcurrency || 4) <= 4) ? 2 : 3;
         if (cap < 3 && Date.now() - at > 3*86400000) { localStorage.setItem('driftloop_fxl', (cap + 1) + '|' + Date.now()); return cap + 1; }   // cada 3 días prueba un escalón más
@@ -1459,9 +1459,12 @@ const decor = { boards: [], paints: [], tents: [], fans: [], posts: [], cars: []
 })();
 /* --------- Horneado de tiles --------- */
 const TS = 512, TM = 2;                       // tamaño de tile en el mundo y margen anti-costuras
-let TSC = QUAL >= 3 ? 0.8 : QUAL >= 2 ? (MAXQ ? 1.25 : 0.9) : MAXQ ? 1.5 : 1.25;                               // resolución de los tiles (px por unidad de mundo)
+function tscFor(q) { return (MAXQ ? [1.5, 1.25, 1.0, 0.8] : [1.1, 1.0, 0.8, 0.7])[Math.max(0, Math.min(3, q))]; }   // nitidez de los bloques según lo que de verdad se ve en pantalla
+let TSC = tscFor(QUAL);                               // resolución de los tiles (px por unidad de mundo)
 const tiles = new Map(), queued = new Set(); let bakeQueue = [], frameNo = 0;
-const MAX_TILES = MAXQ ? 38 : 34, tilePool = [];
+const MAX_TILES = MAXQ ? 52 : 46, tilePool = []; let tileNeed = 0;
+const TILE_MEM = (MAXQ ? 160 : DEV_LO ? 50 : 120)*1048576;   // memoria para bloques: cuantos más entran, menos se rearman
+function tileCap() { const px = Math.ceil((TS + TM*2)*TSC); return Math.max(tileNeed + 6, Math.min(90, Math.floor(TILE_MEM/(px*px*4)))); }
 let tilesBroken = false;
 const gridSlots = [];
 for (let i = 0; i < 12; i++) gridSlots.push([-40 - Math.floor(i/2)*62 + 24, i % 2 ? 30 : -30]);
@@ -1736,7 +1739,8 @@ function bakeTile(ti, tj) {
 function requestTile(i, j) {
   if (tilesBroken) return null;
   const k = i + ',' + j, t = tiles.get(k);
-  if (t) { t.used = frameNo; return t.c; }
+  if (t) { if (t.used !== frameNo) { t.used = frameNo; tileNeed++; } return t.c; }
+  tileNeed++;
   if (!queued.has(k)) { queued.add(k); bakeQueue.push([i, j]); }
   return null;
 }
@@ -1752,10 +1756,12 @@ function processBake(budgetMs) {
     try { cv_ = bakeTile(i, j); }
     catch (e) { tilesBroken = true; clearTiles(); console.warn('Tiles desactivados:', e); return; }
     const tb = performance.now() - t0;
-    if (!introBake && tb > (MAXQ ? 160 : 90) && TSC > 0.8) { TSC = Math.max(0.8, TSC - 0.25); }   // equipo lento: tiles más livianos
+    if (!introBake && tb > (MAXQ ? 160 : 90) && TSC > 0.7) { TSC = Math.max(0.7, TSC - 0.25); }   // equipo lento: tiles más livianos
     tiles.set(k, { c: cv_, used: frameNo });
-    if (tiles.size > MAX_TILES) {
-      let lk = null, lu = 1e12; for (const [kk, v] of tiles) if (v.used < lu) { lu = v.used; lk = kk; }
+    if (tiles.size > tileCap()) {   // se descarta el bloque usado hace más tiempo, nunca uno que se está viendo
+      // en un circuito el bloque que más tarda en volver a usarse es el que se acaba de dejar atrás: se descarta ese (y no el más viejo, que es justo el que viene)
+      let lk = null, lu = -1; for (const [kk, v] of tiles) if (v.used < frameNo - 90 && v.used > lu) { lu = v.used; lk = kk; }
+      if (!lk) { lu = 1e12; for (const [kk, v] of tiles) if (v.used < lu && v.used < frameNo - 1) { lu = v.used; lk = kk; } }
       if (lk) { tilePool.push(tiles.get(lk).c); tiles.delete(lk); }
     }
   } while (bakeQueue.length && performance.now() - t0 < budgetMs);
@@ -3036,8 +3042,11 @@ function addSkid(x1, y1, x2, y2, type) {
   const i = skHead*5; SK[i] = x1; SK[i+1] = y1; SK[i+2] = x2; SK[i+3] = y2; SK[i+4] = type;
   skHead = (skHead+1) % SK_MAX; if (skN < SK_MAX) skN++;
 }
+let partSkip = 0;
 function part(x, y, vx, vy, life, size, col, grow) {
-  if (parts.length > (QUAL >= 2 ? 180 : MAXQ ? 520 : 360)) parts.shift();
+  if (grow && QUAL >= 2 && col !== 'mist' && (partSkip = (partSkip + 1) % (QUAL >= 3 ? 3 : 2)) !== 0) return;   // en calidad baja el humo es lo más pesado de dibujar: menos bocanadas
+  const cap = LOCK30 ? 50 : QUAL >= 3 ? 70 : QUAL >= 2 ? 120 : MAXQ ? 520 : 360;
+  while (parts.length > cap) parts.shift();
   parts.push({ x, y, vx, vy, life, max: life, size, col, grow, k: partN++ % 3 });
 }
 function popup(txt, col, big) { popups.push({ txt, col, big: !!big, t: 0 }); if (popups.length > 4) popups.shift(); if (sayOK()) try { sayPopup(txt); } catch(e) {} }
@@ -3161,7 +3170,18 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => { if ((e.code === 'Enter' || e.code === 'KeyL') && typeof keyHeld2 !== 'undefined') keyHeld2 = false; if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') keyHeld = false; if (e.code === 'ArrowDown' || e.code === 'KeyS') keyRev = false; });
 
 const LAUNCH = { pressCd: null, rev: 0 };
-function startCountdown() { try { document.querySelectorAll('.toast').forEach(e => e.remove()); } catch(e) {} banners.length = 0; confetti.length = 0; popups.length = 0; state = 'countdown'; countdown = 3.4; stateT = 0; camT = 0.8; LAUNCH.pressCd = null; }
+// durante la cuenta regresiva se arman de antemano los bloques de fondo de la pista (los que entran en memoria), así la carrera no tiene tirones
+function preloadTrackTiles() {
+  try { if (tilesBroken || typeof cam === 'undefined') return; const v = camView(), r = visibleRadius(v)*0.8, o = {}, cap = tileCap() - 2, want = new Set();
+    for (let d = 0; d < TR.L && want.size < cap; d += 160) { sample(mod(player.dist + d), o);
+      const a0 = Math.floor((o.x - r)/TS), a1 = Math.floor((o.x + r)/TS), b0 = Math.floor((o.y - r)/TS), b1 = Math.floor((o.y + r)/TS);
+      for (let i = a0; i <= a1 && want.size < cap; i++) for (let j = b0; j <= b1 && want.size < cap; j++) {
+        const nx = Math.max(i*TS, Math.min(o.x, (i + 1)*TS)), ny = Math.max(j*TS, Math.min(o.y, (j + 1)*TS));
+        if (Math.hypot(nx - o.x, ny - o.y) <= r) want.add(i + ',' + j); } }
+    for (const k of want) { const [i, j] = k.split(',').map(Number); if (!tiles.has(k)) requestTile(i, j); else tiles.get(k).used = frameNo; }
+  } catch(e) {}
+}
+function startCountdown() { try { document.querySelectorAll('.toast').forEach(e => e.remove()); } catch(e) {} banners.length = 0; confetti.length = 0; popups.length = 0; state = 'countdown'; countdown = 3.4; stateT = 0; camT = 0.8; LAUNCH.pressCd = null; preloadTrackTiles(); }
 
 /* =====================================================================
    FÍSICA REALISTA (la misma para vos y para los rivales)
@@ -3398,6 +3418,7 @@ function onLap(c, ld) {
   if (first && ld === 0) { c.lapStartT = raceTime; return; }
   const lt = raceTime - c.lapStartT; c.lapStartT = raceTime; c.lastLap = lt;
   if (!c.bestLap || lt < c.bestLap) c.bestLap = lt;
+  if (c.isPlayer && !duoMode && !licMode) worldLap(lt);
   if (c.isPlayer && ttMode) ttOnLap(lt);
   if (c.lapsDone >= LAPS && !c.finished) {
     c.finished = true; c.finishTime = raceTime;
@@ -3757,18 +3778,22 @@ function render() {
   const v = camView(), z = v.zoom, R = visibleRadius(v);
 
   // tiles visibles + pre-carga de lo que viene adelante
-  const vis = []; let missing = false;
+  const vis = []; let missing = false; tileNeed = 0;
   const i0 = Math.floor((cam.x - R)/TS), i1 = Math.floor((cam.x + R)/TS), j0 = Math.floor((cam.y - R)/TS), j1 = Math.floor((cam.y + R)/TS);
   for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
     const nx = Math.max(i*TS, Math.min(cam.x, (i + 1)*TS)), ny = Math.max(j*TS, Math.min(cam.y, (j + 1)*TS));
     if (Math.hypot(nx - cam.x, ny - cam.y) > R) continue;
     const t = requestTile(i, j); if (t) vis.push([i, j, t]); else missing = true;
   }
-  for (const a of (MAXQ ? [450, 850, 1250] : [450, 850])) {
-    sample(mod(player.dist) + a, tA); const ti = Math.floor(tA.x/TS), tj = Math.floor(tA.y/TS);
-    for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) requestTile(ti + di, tj + dj);
+  for (const a of (MAXQ ? [450, 850, 1250] : [450, 850])) {   // pre-carga: los bloques que van a verse alrededor de lo que viene (antes pedía 3x3 bloques enteros y no entraban en memoria)
+    sample(mod(player.dist) + a, tA); const r2 = R*0.8;
+    const a0 = Math.floor((tA.x - r2)/TS), a1 = Math.floor((tA.x + r2)/TS), b0 = Math.floor((tA.y - r2)/TS), b1 = Math.floor((tA.y + r2)/TS);
+    for (let i = a0; i <= a1; i++) for (let j = b0; j <= b1; j++) {
+      const nx = Math.max(i*TS, Math.min(tA.x, (i + 1)*TS)), ny = Math.max(j*TS, Math.min(tA.y, (j + 1)*TS));
+      if (Math.hypot(nx - tA.x, ny - tA.y) <= r2) requestTile(i, j);
+    }
   }
-  processBake(introBake ? 900 : missing ? 10 : 3); introBake = false;
+  processBake(introBake ? 900 : missing ? 10 : state === 'countdown' ? 12 : 3); introBake = false;
 
   ctx.save();
   ctx.translate(W*v.ax + sx, H*cam.ay + sy); ctx.scale(z, z); ctx.rotate(-cam.ang - Math.PI/2 + v.ao); ctx.translate(-cam.x + kickX, -cam.y + kickY);
@@ -4752,7 +4777,7 @@ function gPreviewLoop(now) {
    PAUSA Y OPCIONES
    ===================================================================== */
 const SET = prof.set = Object.assign({ vol: 0.9, eng: 1, fx: 1, vib: true, drone: true, names: true, warn: true, laps: 3, rivals: 5, diff: 'normal', quality: 'auto', lang: 'auto', music: 0.55, voice: true, vgen: 'f', intro: true, damage: true, mode: 'carrera' }, prof.set || {});
-if (SET.qv !== 2) { SET.quality = 'auto'; SET.qv = 2; }
+if (SET.qv !== 3) { SET.quality = 'auto'; SET.qv = 3; }   // nov 2026: todos vuelven una vez a Automática (la "Máxima" copiada por la nube trababa celulares comunes)
 SET.warn = false; SET.voice = false;   // sin aviso de cuándo soltar y sin locutor   // antes todos arrancaban en Máxima: ahora es automática salvo que la elijas
 const DIFFS = { facil: ['Fácil', 0.98], normal: ['Normal', 1.05], dificil: ['Difícil', 1.11], experto: ['Experto', 1.17] };   // más duras que antes (0.93 / 1.0 / 1.06)
 function applySettings() {
@@ -5002,7 +5027,7 @@ function mRender(anim) {
     ${gc ? `<button class="go cupgo${a(0.38)}" data-a="cupgo"><span>${cupLabel(gc)} ▶</span><small>${EN ? 'Race' : 'Carrera'} ${gc.round + 1}/${CUPS[gc.k].races.length} · ${TRACKS[CUPS[gc.k].races[gc.round].track].name}</small></button>`
          : `<button class="go${a(0.38)}" data-a="go"><span>CORRER ▶</span></button>`}
     <div class="row2${a(0.42)}"><button class="sec" data-a="free">🏁 ${EN ? 'FREE RACE' : 'CARRERA LIBRE'}</button><button class="sec" data-a="gar">🔧 ${EN ? 'GARAGE' : 'GARAJE'}</button></div>
-    <div class="row3${a(0.46)}"><button class="sec gold" data-a="champ">🏆 ${EN ? 'CUPS' : 'COPAS'}</button><button class="sec" data-a="more">⭐ ${EN ? 'MORE' : 'MÁS'}${moreBadge() ? ' <span class="nb">' + moreBadge() + '</span>' : ''}</button><button class="sec ic" data-a="opt">⚙</button></div>`;
+    <div class="row3${a(0.46)}"><button class="sec gold" data-a="champ">🏆 ${EN ? 'CUPS' : 'COPAS'}</button><button class="sec" data-a="rank">🌎 ${EN ? 'RANKING' : 'RÁNKING'}</button><button class="sec" data-a="more">⭐ ${EN ? 'MORE' : 'MÁS'}${moreBadge() ? ' <span class="nb">' + moreBadge() + '</span>' : ''}</button><button class="sec ic" data-a="opt">⚙</button></div>`;
   mEl.querySelectorAll('[data-a]').forEach(b => b.onclick = ev => {
     ev.stopPropagation(); const act = b.dataset.a;
     if (act === 'cupgo') { initAudio(); sfxBlip(880, 0.08); guideGo(); }
@@ -5018,6 +5043,7 @@ function mRender(anim) {
     else if (act === 'tt') openTTPanel();
     else if (act === 'lvl') openLevelPanel();
     else if (act === 'gar') openGarage();
+    else if (act === 'rank') openRanking();
     else if (act === 'opt') openPause(true);
     else if (act === 'tracks') { initAudio(); sfxBlip(880, 0.06); openTracksPanel(); }
     else if (act === 't-' || act === 't+') cycleTrackDir(act === 't+' ? 1 : -1);
@@ -6142,7 +6168,7 @@ function openTTPanel() {
     <div class="bar"><button class="s" data-a="back">VOLVER</button><button class="s ch2" data-a="dare">🤝 DESAFÍO</button><button class="s ch2" data-a="lg">🏆 TIEMPOS</button></div>`);
   xEl.querySelectorAll('[data-k]').forEach(b => b.onclick = () => { initAudio(); sfxBlip(900, 0.05); ttGo(b.dataset.k); });
   xEl.querySelector('[data-a="dare"]').onclick = () => { initAudio(); openChallengeImport(); };
-  xEl.querySelector('[data-a="lg"]').onclick = () => { initAudio(); lgSel = 0; lgWorld = true; lgWTrack = ''; openLeaguePanel(); lgRefresh(); };
+  xEl.querySelector('[data-a="lg"]').onclick = () => { initAudio(); lgSel = 0; lgFrom = 'tt'; lgWorld = true; lgWTrack = ''; openLeaguePanel(); lgRefresh(); };
   xEl.querySelector('[data-a="back"]').onclick = () => { initAudio(); hidePanel(); };
 }
 function openTTResults() {
@@ -6382,23 +6408,42 @@ async function lgGhost(code, id) { const d = await fsReq('GET', `/leagues/${code
 async function lgPush(code, track, t, g, model) {
   await fbToken();
   const name = (prof.name || 'PILOTO').slice(0, 12);
-  return fsReq('PATCH', `/leagues/${code}/times/${fbAuth.uid}_${track}`, fsEnc({ uid: fbAuth.uid, name, track, t: +t.toFixed(3), g, c: prof.col, m: MODELS[model] ? model : prof.model, at: Date.now() }));
+  const doc = { uid: fbAuth.uid, name, track, t: +t.toFixed(3), c: prof.col, m: MODELS[model] ? model : prof.model, at: Date.now() }; if (g) doc.g = g;   // vuelta de carrera: sin fantasma
+  return fsReq('PATCH', `/leagues/${code}/times/${fbAuth.uid}_${track}`, fsEnc(doc));
 }
 // sube a todas tus ligas el récord de un circuito (con su fantasma)
 function lgGhostFor(track) { try { const g = JSON.parse(localStorage.getItem('driftloop_ghost_' + track)); if (g && g.d && g.d.length > 10) return g; } catch(e) {} return null; }
 async function lgSyncTrack(track, onlyCode) {
   if (track === 'diaria') return 0;
-  const g = lgGhostFor(track), inf = prof.tt[track]; if (!g || !inf || !inf.best) return 0;
+  const g = lgGhostFor(track), inf = (prof.tt || {})[track], tt = g && inf && inf.best ? inf.best : 0, wb = (prof.wb || {})[track];
   let n = 0;
-  const dests = (prof.name ? [LG_WORLD] : []).concat(prof.leagues || []);   // con nombre puesto, tus récords van también a la tabla mundial
-  for (const L of dests) { if (onlyCode && L.code !== onlyCode) continue; try { await lgPush(L.code, track, inf.best, encodeGhostData(ghostRows(g)), g.model); n++; } catch(e) {} }
+  if (rankOn() && (!onlyCode || onlyCode === LG_WORLD.code)) {   // ránking mundial: tu mejor vuelta en cualquier modo
+    let t = 0, gg, m; if (tt) { t = tt; gg = encodeGhostData(ghostRows(g)); m = g.model; }
+    if (wb && wb.t > 5 && (!t || wb.t < t - 0.001)) { t = wb.t; gg = undefined; m = wb.m; }
+    const up = (prof.wbUp = prof.wbUp || {});
+    if (t && Math.abs((up[track] || 0) - t) > 0.0005) { try { await lgPush(LG_WORLD.code, track, t, gg, m); up[track] = t; saveProf(); n++; } catch(e) {} }
+  }
+  if (tt) for (const L of prof.leagues || []) { if (onlyCode && L.code !== onlyCode) continue; try { await lgPush(L.code, track, tt, encodeGhostData(ghostRows(g)), g.model); n++; } catch(e) {} }   // ligas de amigos: solo contrarreloj
   return n;
 }
-async function lgSyncAll(code) { let n = 0; for (const k in prof.tt) if (k !== 'diaria') n += await lgSyncTrack(k, code); return n; }
-function lgOnRecord() { if (((prof.leagues || []).length || prof.name) && TRACK_KEY !== 'diaria') lgSyncTrack(TRACK_KEY).then(n => { if (n && ttSession) ttSession.lgUp = n; }).catch(() => {}); }
+async function lgSyncAll(code) { let n = 0; const ks = new Set(Object.keys(prof.tt || {}).concat(Object.keys(prof.wb || {}))); for (const k of ks) if (k !== 'diaria' && TRACKS[k]) n += await lgSyncTrack(k, code); return n; }
+function rankOn() { return !!(fbAuth && fbAuth.google && prof.name); }   // para aparecer en el ránking: cuenta de Google + apodo
+function worldLap(lt) {
+  if (TRACK_KEY === 'diaria' || !(lt > 5) || !TRACKS[TRACK_KEY]) return;
+  const w = (prof.wb = prof.wb || {}), b = w[TRACK_KEY];
+  if (b && b.t <= lt + 0.001) return;
+  w[TRACK_KEY] = { t: +lt.toFixed(3), m: prof.model }; saveProf();
+  if (rankOn()) lgSyncTrack(TRACK_KEY, LG_WORLD.code).then(n => { if (n) lgWCache[TRACK_KEY] = null; }).catch(() => {});
+}
+function onGoogleLogin() {   // al entrar con Google: apodo con tu nombre (lo podés cambiar) y se suben tus récords al ránking
+  if (!prof.name && fbAuth && fbAuth.gname) { prof.name = String(fbAuth.gname).trim().split(/\s+/)[0].toUpperCase().replace(/[^A-Z0-9ÁÉÍÓÚÑÜ_.-]/g, '').slice(0, 12); saveProf(); }
+  lgSyncAll(LG_WORLD.code).then(() => { lgWCache = {}; if (panelOpen && xEl.querySelector('.lgw')) { openLeaguePanel(); lgRefresh(); } }).catch(() => {});
+}
+function openRanking() { initAudio(); lgFrom = 'menu'; lgWorld = true; lgWTrack = TRACK_KEY; openLeaguePanel(); lgRefresh(); }
+function lgOnRecord() { if (((prof.leagues || []).length || rankOn()) && TRACK_KEY !== 'diaria') lgSyncTrack(TRACK_KEY).then(n => { if (n && ttSession) ttSession.lgUp = n; }).catch(() => {}); }
 
 // ---- panel ----
-let lgSel = 0, lgCache = {}, lgWorld = true, lgWTrack = '', lgWCat = 'all', lgWCache = {};
+let lgSel = 0, lgCache = {}, lgWorld = true, lgWTrack = '', lgWCat = 'all', lgWCache = {}, lgFrom = 'tt';
 function lgErr(e) {
   const d = e && (e.detail || (e.name === 'AbortError' ? 'timeout' : e.name === 'TypeError' ? 'red bloqueada' : String(e.message || e)));
   return (!navigator.onLine ? 'Sin conexión a internet.' : e && e.status === 403 ? 'El servidor rechazó el pedido. Probá de nuevo.' : 'No se pudo conectar con el servidor de ligas.') + (d ? ` <small style="display:block;opacity:.7;font-size:12px">(${esc(d)})</small>` : '');
@@ -6444,7 +6489,8 @@ function openLeaguePanel(msg) {
   xEl.querySelectorAll('[data-g]').forEach(b => b.onclick = () => lgRaceGhost(lgWorld ? LG_WORLD : cur, b.dataset.g, b.dataset.k));
   xEl.querySelectorAll('[data-a]').forEach(b => b.onclick = async () => {
     initAudio(); const a = b.dataset.a;
-    if (a === 'back') { hidePanel(); openTTPanel(); return; }
+    if (a === 'back') { hidePanel(); if (lgFrom !== 'menu') openTTPanel(); return; }
+    if (a === 'glogin') { googleLogin(); return; }
     if (a === 'more') { lgSel = L.length; openLeagueJoin(); return; }
     if (a === 'wprev' || a === 'wnext') { const ks = TRACK_KEYS.filter(k => k !== 'diaria'), i = ks.indexOf(lgWTrack); lgWTrack = ks[(i + (a === 'wnext' ? 1 : ks.length - 1)) % ks.length]; openLeaguePanel(); lgRefresh(); return; }
     if (a === 'ref' && lgWorld) { lgWCache[lgWTrack] = null; openLeaguePanel(); lgRefresh(); return; }
@@ -6473,9 +6519,12 @@ function lgWorldBody(nameRow) {
       ${rows.slice(0, 20).map(row).join('')}${mi >= 20 ? '<div class="lgdots">⋯</div>' + row(rows[mi], mi) : ''}</div>`
       : `<div class="sub" style="text-align:center;margin:20px 0">${LX('Todavía nadie tiene tiempo acá. ¡Sé el primero!', 'No times here yet. Be the first!')}</div>`;
   }
-  const hint = prof.name ? LX('Tus récords de contrarreloj aparecen acá con tu nombre. Tocá un tiempo para correr contra ese fantasma.', 'Your time trial records show up here with your name. Tap a time to race that ghost.')
-                         : LX('Poné tu nombre para que tus récords de contrarreloj aparezcan en la tabla mundial.', 'Enter your name so your time trial records show up in the world ranking.');
-  return `<div class="lgw"><div class="sub">${hint}</div>${nameRow}
+  const g = fbAuth && fbAuth.google;
+  const hint = !g ? LX('Tu mejor vuelta de cada circuito, en cualquier modo, compite contra todos los jugadores. Entrá con Google para aparecer.', 'Your best lap on each track, in any mode, competes against every player. Sign in with Google to show up.')
+    : prof.name ? LX('Tu mejor vuelta de cada circuito aparece acá con tu apodo. Tocá un tiempo para correr contra su fantasma.', 'Your best lap on each track shows up here with your nickname. Tap a time to race its ghost.')
+    : LX('Elegí un apodo para aparecer en el ránking.', 'Pick a nickname to show up in the ranking.');
+  const login = g ? nameRow : `<button class="lgin" data-a="glogin"><b>G</b>${LX('ENTRAR CON GOOGLE', 'SIGN IN WITH GOOGLE')}</button>`;
+  return `<div class="lgw"><div class="sub">${hint}</div>${login}
     <div class="lgwtr"><button data-a="wprev">◀</button><div>${TRACK_SVG[k] || ''}<b>${TRACKS[k].name}</b></div><button data-a="wnext">▶</button><button data-a="ref">↻</button></div>
     <div class="lgtabs lgcats">${cats}</div>${list}</div>`;
 }
@@ -6526,7 +6575,7 @@ function lgInviteURL(L) {
 async function lgRaceGhost(L, id, track) {
   if (fbAuth && id.indexOf(fbAuth.uid + '_') === 0) return;
   try {
-    const d = await lgGhost(L.code, id); if (!d || !d.g) throw 0;
+    const d = await lgGhost(L.code, id); if (d && !d.g) { openLeaguePanel(LX('Ese tiempo se hizo en carrera: no tiene fantasma para correr.', 'That time was set in a race: there is no ghost to race.')); return; } if (!d) throw 0;
     const g = { name: String(d.name || 'AMIGO').toUpperCase().slice(0, 12), t: d.t, model: MODELS[d.m] ? d.m : 'gt', col: /^#[0-9a-f]{6}$/i.test(d.c) ? d.c : '#ff7a00',
                 L: 0, d: decodeGhostData(d.g), track, won: false };
     if (g.d.length < 10) throw 0;
@@ -6554,6 +6603,8 @@ async function lgRaceGhost(L, id, track) {
 #xp .lgwtr button{flex:none;width:40px;height:40px;border-radius:20px;background:rgba(255,255,255,.08);color:#fff;font-size:17px;border:0}
 #xp .lgr small.v{display:block;color:#9aa3ad;font-size:12px;font-weight:600}
 #xp .lgdots{text-align:center;color:#9aa3ad;line-height:1}
+#xp .lgin{width:100%;height:50px;margin:8px 0;font-size:18px;background:#fff!important;color:#1f1f1f!important;border:0;border-radius:25px;font-weight:800}
+#xp .lgin b{color:#4285f4;font-size:21px;margin-right:6px}
 #xp .lgcode{display:flex;align-items:center;gap:8px;padding:10px;border-radius:10px;background:rgba(255,210,63,.08);border:1px solid rgba(255,210,63,.35)}
 #xp .lgcode div{flex:1}
 #xp .lgcode small{display:block;font-size:12px;color:#9aa3ad;font-weight:700;letter-spacing:1px}
@@ -7047,6 +7098,44 @@ function showStreak(r) {
     const n = r.lost + 1, pay = STREAK_PAY(n); prof.money += Math.max(0, pay - r.pay); prof.streak.n = n; prof.streak.best = Math.max(prof.streak.best || 0, n); saveProf(); showStreak({ n, pay, lost: 0 }); };
   bkEl.querySelector('[data-b=ok]').onclick = () => { bkEl.style.display = 'none'; sfxBlip(1200, 0.08); if (menuShown) mRender(false); };
 }
+// ---- novedades: se muestran una sola vez después de actualizar ----
+const NEWS_V = 1;
+function showNews(tries) {
+  if ((prof.news || 0) >= NEWS_V) return;
+  if (!prof.tut || (prof.races || 0) < 1) { prof.news = NEWS_V; saveProf(); return; }   // los nuevos lo descubren solos
+  const busy = bkEl.style.display === 'flex' || !menuShown || (typeof introPhase !== 'undefined' && introPhase) || panelOpen;
+  if (busy) { if ((tries || 0) < 60) setTimeout(() => showNews((tries || 0) + 1), 3000); return; }
+  prof.news = NEWS_V; saveProf();
+  bkEl.innerHTML = `<div class="box" style="text-align:center"><h3>🌎 ${LX('NUEVO: RÁNKING MUNDIAL', 'NEW: WORLD RANKING')}</h3>
+    <p>${LX('Tu mejor vuelta de cada circuito compite contra todos los jugadores. Entrá con Google, elegí tu apodo y mirá en qué puesto estás. ¿Podés subir?', 'Your best lap on each track competes against every player. Sign in with Google, pick a nickname and see where you rank. Can you climb?')}</p>
+    <p class="sub" style="opacity:.8">${LX('Está en el menú: botón 🌎 RÁNKING.', 'It is in the menu: 🌎 RANKING button.')}</p>
+    <div class="row"><button data-b="no">${LX('DESPUÉS', 'LATER')}</button><button class="go" data-b="ok">${LX('VER RÁNKING', 'SEE RANKING')}</button></div></div>`;
+  bkEl.style.display = 'flex';
+  bkEl.querySelector('[data-b=no]').onclick = () => { bkEl.style.display = 'none'; };
+  bkEl.querySelector('[data-b=ok]').onclick = () => { bkEl.style.display = 'none'; openRanking(); };
+}
+setTimeout(() => showNews(0), 6500);
+setTimeout(() => { try { if (rankOn()) lgSyncAll(LG_WORLD.code).catch(() => {}); } catch(e) {} }, 9000);   // por si hiciste récords sin conexión
+// ---- aviso de versión nueva (solo en la app instalada desde Google Play) ----
+let updAsked = false;
+async function checkAppUpdate(tries) {
+  const AUp = NP('AppUpdate'); if (!AUp || updAsked) return;
+  let info; try { info = await AUp.getAppUpdateInfo(); } catch(e) { return; }   // instalada fuera de Play o sin conexión: no se avisa
+  if (!info || info.updateAvailability !== 2) return;
+  const busy = bkEl.style.display === 'flex' || !menuShown || (typeof introPhase !== 'undefined' && introPhase) || panelOpen;
+  if (busy) { if ((tries || 0) < 40) setTimeout(() => checkAppUpdate((tries || 0) + 1), 3000); return; }   // espera a estar en el menú, sin otro cartel abierto
+  updAsked = true;
+  bkEl.innerHTML = `<div class="box" style="text-align:center"><h3>⬆ ${LX('HAY UNA VERSIÓN NUEVA', 'NEW VERSION AVAILABLE')}</h3>
+    <p>${LX('Actualizá Drift Loop para tener las últimas mejoras. Tu progreso no se pierde.', 'Update Drift Loop to get the latest improvements. Your progress is kept.')}</p>
+    <div class="row"><button data-b="no">${LX('DESPUÉS', 'LATER')}</button><button class="go" data-b="ok">${LX('ACTUALIZAR', 'UPDATE')}</button></div></div>`;
+  bkEl.style.display = 'flex';
+  bkEl.querySelector('[data-b=no]').onclick = () => { bkEl.style.display = 'none'; };
+  bkEl.querySelector('[data-b=ok]').onclick = async () => { bkEl.style.display = 'none';
+    try { if (info.immediateUpdateAllowed) await AUp.performImmediateUpdate(); else await AUp.openAppStore(); }
+    catch(e) { try { await AUp.openAppStore(); } catch(_) {} } };
+}
+setTimeout(() => checkAppUpdate(0), 4000);   // al abrir el juego
+document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(() => checkAppUpdate(0), 1500); });   // al volver al juego
 // ---- evento semanal ----
 var eventMode = false, GRIP_MOD = 1;
 const EVT_MODS = [
@@ -7743,12 +7832,18 @@ function cloudPayload() {
   const data = {}, ghosts = {};
   for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (!k || k.indexOf('driftloop_') !== 0) continue;
     if (k.indexOf('driftloop_ghost_') === 0) { if (k.indexOf('diaria') < 0) try { const g = JSON.parse(localStorage.getItem(k)); if (g && g.d) { const d = g.half ? [].concat(...g.d.map(r => [r, r])) : g.d; ghosts[k.slice(16)] = { t: g.t, model: g.model, L: g.L, e: encodeGhostData(d) }; } } catch(e) {} }
-    else if (k.indexOf('driftloop_rival_') !== 0 && !/^driftloop_(fb|cloudsync|daily_trk|fxl|did)$/.test(k) && !/go$/.test(k)) data[k] = localStorage.getItem(k); }
+    else if (k.indexOf('driftloop_rival_') !== 0 && !/^driftloop_(fb|cloudsync|daily_trk|fxl|did|ql)$/.test(k) && !/go$/.test(k)) data[k] = localStorage.getItem(k); }
   return JSON.stringify({ v: 1, data, ghosts, did: DEV_ID, la: prof.savedAt || 0 });
 }
 function cloudApply(raw) {
   const p = JSON.parse(raw); if (!p.data || !p.data.driftloop_profile) throw 0;
-  for (const k in p.data) localStorage.setItem(k, p.data[k]);
+  try {   // la calidad gráfica es de cada celular: no se copia la del otro equipo (un "Máxima" de un celular potente trababa uno común)
+    const mine = JSON.parse(localStorage.getItem('driftloop_profile') || '{}').set || {}, np = JSON.parse(p.data.driftloop_profile); np.set = np.set || {};
+    if (mine.quality) np.set.quality = mine.quality; else delete np.set.quality;
+    if (mine.qv) np.set.qv = mine.qv; else delete np.set.qv;
+    p.data.driftloop_profile = JSON.stringify(np);
+  } catch(e) {}
+  for (const k in p.data) if (k !== 'driftloop_ql' && k !== 'driftloop_fxl') localStorage.setItem(k, p.data[k]);   // calidad aprendida: de cada celular
   for (const k in p.ghosts || {}) { const g = p.ghosts[k]; localStorage.setItem('driftloop_ghost_' + k, JSON.stringify({ t: g.t, model: g.model, L: g.L, d: decodeGhostData(g.e), half: 1 })); }
 }
 async function cloudPush() {
@@ -7809,7 +7904,7 @@ function googleLogin() {
     google.accounts.id.initialize({ client_id: G_CLIENT, auto_select: false, callback: async r => {
       msg.style.color = '#ffd23f'; msg.textContent = 'Conectando…';
       try { let link = null; try { link = fbAuth && !fbAuth.google ? await fbToken() : null; } catch(e) {}
-            fbAuth = await fbSignInGoogle(r.credential, link); fbSave(); bkEl.style.display = 'none'; popup('☁ Conectado', '#3dff8a', true); if (paused) pRender(); cloudPull(true); }
+            fbAuth = await fbSignInGoogle(r.credential, link); fbSave(); bkEl.style.display = 'none'; popup('☁ Conectado', '#3dff8a', true); if (paused) pRender(); cloudPull(true); onGoogleLogin(); }
       catch(e) { msg.style.color = '#ff8a7a'; msg.textContent = 'No se pudo iniciar sesión. Probá de nuevo.'; }
     } });
     google.accounts.id.renderButton(bkEl.querySelector('#gbtn'), { theme: 'filled_black', size: 'large', shape: 'pill', text: 'continue_with', locale: EN ? 'en' : 'es-419' });
@@ -7824,7 +7919,7 @@ async function nativeLoginUrl(url) {
   if (!q.rt) return;
   try { const B = NP('Browser'); B && B.close().catch(() => {}); } catch(e) {}
   fbAuth = { refreshToken: q.rt, uid: q.uid, exp: 0, google: true, email: q.e || '', gname: q.n || '' }; fbSave();
-  try { await fbToken(); fbAuth.google = true; fbAuth.email = q.e || ''; fbAuth.gname = q.n || ''; fbSave(); popup('☁ Conectado', '#3dff8a', true); if (paused) pRender(); cloudPull(true); }
+  try { await fbToken(); fbAuth.google = true; fbAuth.email = q.e || ''; fbAuth.gname = q.n || ''; fbSave(); popup('☁ Conectado', '#3dff8a', true); if (paused) pRender(); cloudPull(true); onGoogleLogin(); }
   catch(e) { popup('No se pudo iniciar sesión', '#ff8a7a', true); }
 }
 if (NATIVE) { try { const A = NP('App'); A && A.addListener('appUrlOpen', ev => { if (ev && ev.url && ev.url.indexOf('driftloop://login') === 0) nativeLoginUrl(ev.url); }); } catch(e) {} }
@@ -8166,11 +8261,11 @@ function frame(now) {
   if (now - ecoLast < (ECO || LOCK30 ? 30 : 10)) { requestAnimationFrame(frame); return; }   // ahorro: 30 cuadros por segundo; pantallas de 120 Hz: tope de 60
   if (ADS.busy) { last = now; requestAnimationFrame(frame); return; }   // con el anuncio en pantalla el juego no dibuja nada
   ecoLast = now;
-  const raw = Math.max(0, (now - last)/1000); let dt = Math.min(ECO || LOCK30 ? 0.05 : 0.033, raw); last = Math.max(last, now);
+  const raw = Math.max(0, (now - last)/1000); let dt = Math.min(0.1, raw); last = Math.max(last, now);   // si el celular dibuja pocos cuadros, el juego igual va a velocidad real (ver pasos abajo)
   if (tut && !paused) dt *= tutTick(dt);
   if (slowT > 0 && !paused) { slowT -= raw; dt *= 0.32; }   // cámara lenta al cruzar la meta
   if (hitStop > 0 && !paused) { hitStop -= raw; dt *= 0.04; }   // micro-pausa en un choque fuerte
-  try { if (introPhase) introTick(dt); if (!paused) { update(dt); if (ttMode) ttTick(); if (licMode) licTick(); } render(); try { musicTick(); } catch(e) {} }
+  try { if (introPhase) introTick(dt); if (!paused) { const ns = Math.max(1, Math.ceil(dt/0.034 - 1e-6)); for (let i = 0; i < ns && !paused; i++) { update(dt/ns); if (ttMode) ttTick(); if (licMode) licTick(); } } render(); try { musicTick(); } catch(e) {} }
   catch (e) { errCount++; lastErr = String(e && e.message || e); lastErrT = performance.now(); if (errCount < 5) console.error(e); try { ctx.restore(); ctx.restore(); } catch(_) {} }
   syncMenu(dt); syncRes(dt);
   showErr();
@@ -8180,7 +8275,7 @@ function frame(now) {
     perfAcc += raw; perfN++;
     if (perfAcc > 1 || (perfAcc > 0.5 && perfAcc/perfN > 0.033)) {   // si va a los tirones, reacciona en medio segundo
       const avg = perfAcc/perfN - (ECO ? 0.0167 : 0), strict = QSET !== 'maxima', bad = avg > 0.033;   // en Ahorro (30 cuadros) se descuenta la espera propia
-      const qDown = n => { QUAL = Math.min(3, QUAL + n); qualSave(); resize(); postCanvas = null; const t = QUAL >= 3 ? 0.8 : MAXQ ? 1.25 : 0.9; if (QUAL >= 2 && TSC > t) { TSC = t; clearTiles(); } };
+      const qDown = n => { QUAL = Math.min(3, QUAL + n); qualSave(); resize(); postCanvas = null; const t = tscFor(QUAL); if (TSC > t) { TSC = t; clearTiles(); preloadTrackTiles(); } };
       if (LOCK30) { /* ya está en lo mínimo */ }
       else if (bad) { while (fxDown()) {} if (QUAL < 3) qDown(avg > 0.05 ? 2 : 1); else LOCK30 = true; }   // va a los tirones: baja todo de una
       else if (avg > (strict ? 0.019 : 0.021) && fxDown()) { /* primero se apagan efectos */ }
