@@ -616,14 +616,14 @@ function worldPos(s, d, o) { sample(s, o); o.wx = o.x - o.ty*d; o.wy = o.y + o.t
    CANVAS / ESCALA
    ===================================================================== */
 const cv = document.getElementById('c'), ctx = cv.getContext('2d', { alpha: false }) || cv.getContext('2d');
-let W = 0, H = 0, DPR = 1, QUAL = 0;
+let W = 0, H = 0, DPR = 1, QUAL = 0, menuLo = false;
 function qualSave() { try { localStorage.setItem('driftloop_ql', QUAL + '|' + Date.now()); } catch(e) {} }
 // Calidad: 'auto' (por defecto) mira el equipo y se va ajustando sola · 'maxima' y 'ahorro' solo si el jugador las elige
 const QSET = (function () { try { const p = JSON.parse(localStorage.getItem('driftloop_profile')); if (p && p.set && p.set.qv === 3 && p.set.quality) return p.set.quality; } catch(e) {} return 'auto'; })();
 const DEV_HI = (navigator.deviceMemory || 4) >= 8 && (navigator.hardwareConcurrency || 4) >= 8;      // gama alta
 const DEV_LO = (navigator.deviceMemory || 4) <= 3 || (navigator.hardwareConcurrency || 4) <= 4;      // gama baja
 const AUTOQ = QSET === 'auto';
-const MAXQ = QSET === 'maxima' || (AUTOQ && DEV_HI);
+const MAXQ = QSET === 'maxima';   // 'Máxima' solo si el jugador la elige (antes la automática la usaba en gama alta y el menú se trababa a 120 Hz)
 const ECO = QSET === 'ahorro';
 let LOCK30 = false;                                       // último recurso: 30 cuadros parejos en vez de ir a los saltos
 const QCAP = MAXQ ? [3, 2, 1.5, 1] : ECO ? [1.25, 1, 1, 0.6] : [2, 1.5, 1, 0.6];   // el último nivel es para celulares que no dan abasto: menos nitidez pero fluido   // límite de resolución por nivel de calidad
@@ -631,6 +631,7 @@ function resize() {
   const vw = innerWidth, vh = innerHeight;
   W = vw > vh ? Math.round(vh*0.6) : vw; H = vh;   // en escritorio simula un celular vertical
   DPR = Math.min(QCAP[QUAL], devicePixelRatio || 1, Math.sqrt((MAXQ ? 2.0e6 : 1.5e6)/Math.max(1, W*H)));   // tope de píxeles totales
+  if (menuLo) DPR = Math.min(DPR, 1.5);   // en el menú la pista es solo el fondo: menos resolución, mucho más liviano
   cv.width = Math.round(W*DPR); cv.height = Math.round(H*DPR);
   cv.style.width = W+'px'; cv.style.height = H+'px';
 }
@@ -3913,7 +3914,7 @@ function render() {
   if (WX.night) drawNight(R);
   drawWeatherOverlay();
   if (introPhase === 'play') { drawBloom(); drawPost(); drawIntro(); }
-  else { drawBloom(); drawPost(); drawSpeedBlur(); drawLensRain(); drawTags(); drawFX(); drawHUD(); drawTutorial(); }
+  else { if (state !== 'menu') { drawBloom(); drawPost(); } drawSpeedBlur(); drawLensRain(); drawTags(); drawFX(); drawHUD(); drawTutorial(); }
 }
 
 /* ---------- Noche: capa de oscuridad con "agujeros" de luz (faros y torres) ---------- */
@@ -4800,7 +4801,7 @@ function audioVolumes() {
 }
 let paused = false, pauseFromMenu = false;
 const PCSS = `
-#pause{position:fixed;top:0;height:100%;display:none;z-index:12;background:rgba(6,8,12,.72);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+#pause{position:fixed;top:0;height:100%;display:none;z-index:12;background:rgba(6,8,12,.86);
   font-family:"Barlow Condensed","Arial Narrow",sans-serif;color:#fff;-webkit-user-select:none;user-select:none}
 #pause .pb{position:absolute;left:12px;right:12px;top:14px;bottom:14px;overflow-y:auto;-webkit-overflow-scrolling:touch;background:linear-gradient(#171b23,#0e1116);
   border-radius:12px;border-top:4px solid #e1251b;padding:14px 16px 18px;box-shadow:0 10px 40px rgba(0,0,0,.6)}
@@ -4899,7 +4900,7 @@ const MCSS = `
 #menu .in{opacity:0;transform:translateY(18px);animation:mIn .55s cubic-bezier(.2,.8,.2,1) forwards}
 @keyframes mIn{to{opacity:1;transform:none}}
 #menu .top{display:flex;justify-content:space-between;align-items:center;padding:12px 14px 0}
-#menu .pill{display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+#menu .pill{display:flex;align-items:center;gap:6px;background:rgba(12,14,20,.62);border:1px solid rgba(255,255,255,.14);
   padding:5px 12px;border-radius:20px;font-size:17px;font-weight:800;font-style:italic}
 #menu .pill.money{color:#ffd23f;border-color:rgba(255,210,63,.35);background:rgba(255,210,63,.1)}
 #menu .logo{position:relative;text-align:center;margin-top:1.2vh;line-height:.82;transform:skewX(-9deg)}
@@ -4917,8 +4918,7 @@ const MCSS = `
 #menu .hero .cname b{color:#fff;font-size:20px;font-style:italic;letter-spacing:.5px;margin-right:6px}
 #menu .cards{display:flex;gap:8px;padding:0 12px}
 #menu .card{flex:1;position:relative;border-radius:12px;padding:9px 10px 10px;min-height:118px;overflow:hidden;
-  background:linear-gradient(160deg,rgba(255,255,255,.10),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.13);
-  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+  background:linear-gradient(160deg,rgba(30,34,44,.82),rgba(12,14,20,.74));border:1px solid rgba(255,255,255,.13)}   /* sin desenfoque: sobre un fondo que se mueve es carísimo para la GPU */
 #menu .card .lab{font-size:12px;font-weight:800;letter-spacing:2px;color:#e1251b}
 #menu .card .val{font-size:22px;font-weight:800;font-style:italic;line-height:1.05;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #menu .card .sub{font-size:13px;font-weight:700;color:#9aa3ad;margin-top:2px}
@@ -4952,15 +4952,16 @@ const MCSS = `
 #menu .go.cupgo{height:auto;min-height:70px;padding:8px 0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
 #menu .go.cupgo span{font-size:min(27px,6.6vw);white-space:nowrap;line-height:1.05}
 #menu .row2 .sec,#menu .row3 .sec{white-space:nowrap;font-size:min(17px,4.3vw)}
-#menu .row3 .sec{min-width:0;padding:0 4px;font-size:min(15px,3.8vw)}
+#menu .row3 .sec{min-width:0;padding:0 3px;font-size:min(14px,3.5vw);letter-spacing:0}
 #menu .row3 .sec{flex:1 1 0}
-#menu .row3 .sec[data-a=more]{flex:1.4 1 0}
+#menu .row3 .sec[data-a=more]{flex:1.1 1 0}
+#menu .row3 .sec[data-a=rank]{flex:1.35 1 0}
 #menu .row2,#menu .row3{margin-bottom:0}
 #menu .row3{margin-bottom:max(14px,env(safe-area-inset-bottom))}
 #menu .row3 .sec.ic{flex:0 0 46px}
 #menu .go.cupgo small{font-size:13px;font-weight:700;font-style:normal;letter-spacing:.5px;opacity:.9}
-#menu .sec{flex:1;height:48px;border-radius:9px;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.14);
-  font-size:19px;font-weight:800;font-style:italic;letter-spacing:.5px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+#menu .sec{flex:1;height:48px;border-radius:9px;background:rgba(20,23,31,.74);border:1px solid rgba(255,255,255,.16);
+  font-size:19px;font-weight:800;font-style:italic;letter-spacing:.5px}
 #menu .sec:active{background:rgba(255,255,255,.18)}
 #menu .sec.gold{background:linear-gradient(180deg,rgba(255,210,63,.22),rgba(255,210,63,.08));border-color:rgba(255,210,63,.5);color:#ffe27a}
 #menu .nb{display:inline-block;min-width:22px;height:22px;line-height:22px;border-radius:11px;background:#e1251b;color:#fff;font-size:14px;font-style:normal;margin-left:4px;vertical-align:2px}
@@ -5075,7 +5076,7 @@ function heroLoop(now) {
   if (!menuShown) return;
   const cvh = mEl.querySelector('#mHero');
   if (cvh) {
-    const dpr = Math.min(3, devicePixelRatio || 1), w = cvh.clientWidth, h = cvh.clientHeight;
+    const dpr = Math.min(2, devicePixelRatio || 1), w = cvh.clientWidth, h = cvh.clientHeight;
     if (w > 0 && h > 0) {
       if (cvh.width !== Math.round(w*dpr) || cvh.height !== Math.round(h*dpr)) { cvh.width = Math.round(w*dpr); cvh.height = Math.round(h*dpr); }
       const g = cvh.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
@@ -8268,7 +8269,8 @@ function showErr() {
 }
 let ecoLast = 0;
 function frame(now) {
-  if (now - ecoLast < (ECO || LOCK30 ? 30 : 10)) { requestAnimationFrame(frame); return; }   // ahorro: 30 cuadros por segundo; pantallas de 120 Hz: tope de 60
+  if (now - ecoLast < (ECO || LOCK30 ? 30 : 13.3)) { requestAnimationFrame(frame); return; }   // tope de 60 parejo (en 120 Hz o frecuencia variable el ritmo desparejo se ve a saltos); ahorro: 30
+  { const ml = state === 'menu'; if (ml !== menuLo) { menuLo = ml; resize(); postCanvas = null; } }
   if (ADS.busy) { last = now; requestAnimationFrame(frame); return; }   // con el anuncio en pantalla el juego no dibuja nada
   ecoLast = now;
   const raw = Math.max(0, (now - last)/1000); let dt = Math.min(0.1, raw); last = Math.max(last, now);   // si el celular dibuja pocos cuadros, el juego igual va a velocidad real (ver pasos abajo)
