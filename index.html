@@ -1871,6 +1871,8 @@ const prof = (function () {
   // pintura por vehículo (prof.paint[modelo]). La que tenías queda en el auto que estabas usando; los demás traen la suya de fábrica
   if (!p.paint) { o.paint = {}; if (p.col && MODELS[o.model]) o.paint[o.model] = { col: p.col, acc: p.acc || '#f4f4f0', stripe: p.stripe || 'doble' }; }
   delete o.col; delete o.acc; delete o.stripe;
+  // el Gaucho GT de fábrica pasó de rojo a azul (nov 2026): si nunca lo pintaste, se pone azul
+  { const g = o.paint && o.paint.gt; if (g && ['#d7141a', '#c8102e'].includes(String(g.col).toLowerCase()) && String(g.acc).toLowerCase() === '#f4f4f0' && g.stripe === 'doble') delete o.paint.gt; }
   if (!MODELS[o.model]) o.model = 'gt';
   return o;
 })();
@@ -1879,7 +1881,7 @@ prof.style = Object.assign({ rim: 'negro', neon: 'no', smoke: 'blanco' }, prof.s
 prof.bought = prof.bought || {};
 // pintura de fábrica de cada vehículo: color, color de las franjas y diseño
 const PAINT_DEF = {
-  gt:        { col: '#c8102e', acc: '#f4f4f0', stripe: 'doble' },
+  gt:        { col: '#1550b4', acc: '#f4f4f0', stripe: 'doble' },   // azul con dos franjas blancas, como el auto del ícono
   hatch:     { col: '#1f6fd1', acc: '#ffd23f', stripe: 'laterales' },
   muscle:    { col: '#ff7a00', acc: '#121316', stripe: 'central' },
   proto:     { col: '#00796b', acc: '#f4f4f0', stripe: 'diagonal' },
