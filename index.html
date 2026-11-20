@@ -3967,17 +3967,18 @@ function render() {
 let lcv = null, lctx = null, holeSpr = null, coneSpr = null;
 // "agujeros" de luz ya dibujados una sola vez: en cada cuadro solo se pegan (antes se armaba un degradé por farol y por auto)
 function nightSprites() {
-  holeSpr = mkCanvas(128, 128); let g = holeSpr.getContext('2d');
+  // la oscuridad se arma en memoria común (no en la placa de video): mezclar las dos obligaba al celular a copiar de vuelta cada luz, cuadro por cuadro (eso trababa la noche y la tormenta)
+  holeSpr = mkCanvas(128, 128); let g = holeSpr.getContext('2d', { willReadFrequently: true });
   let gr = g.createRadialGradient(64, 64, 2, 64, 64, 64); gr.addColorStop(0, 'rgba(0,0,0,.8)'); gr.addColorStop(0.5, 'rgba(0,0,0,.5)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
-  const hy = Math.ceil(160*Math.sin(0.42)) + 1; coneSpr = mkCanvas(160, hy*2); g = coneSpr.getContext('2d');
+  const hy = Math.ceil(160*Math.sin(0.42)) + 1; coneSpr = mkCanvas(160, hy*2); g = coneSpr.getContext('2d', { willReadFrequently: true });
   gr = g.createRadialGradient(0, hy, 0, 0, hy, 160); gr.addColorStop(0, 'rgba(0,0,0,.97)'); gr.addColorStop(0.3, 'rgba(0,0,0,.85)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = gr; g.beginPath(); g.moveTo(0, hy); g.arc(0, hy, 160, -0.42, 0.42); g.closePath(); g.fill();
 }
 function drawNight(R) {
   if (!holeSpr) nightSprites();
   const ls = QUAL >= 1 ? 0.2 : 0.25, w = Math.ceil(cv.width*ls), hh = Math.ceil(cv.height*ls);   // la oscuridad es suave: alcanza con un lienzo chico
-  if (!lcv || lcv.width !== w || lcv.height !== hh) { lcv = mkCanvas(w, hh); lctx = lcv.getContext('2d'); }
+  if (!lcv || lcv.width !== w || lcv.height !== hh) { lcv = mkCanvas(w, hh); lctx = lcv.getContext('2d', { willReadFrequently: true }); }
   const L = lctx, m = viewM;
   L.setTransform(1, 0, 0, 1, 0, 0); L.globalCompositeOperation = 'copy'; L.globalAlpha = 1;
   L.fillStyle = WX.wet ? 'rgba(3,6,16,.88)' : 'rgba(5,9,26,.84)'; L.fillRect(0, 0, w, hh);
