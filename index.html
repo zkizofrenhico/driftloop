@@ -617,7 +617,7 @@ function worldPos(s, d, o) { sample(s, o); o.wx = o.x - o.ty*d; o.wy = o.y + o.t
    ===================================================================== */
 const cv = document.getElementById('c'), ctx = cv.getContext('2d', { alpha: false }) || cv.getContext('2d');
 let W = 0, H = 0, DPR = 1, QUAL = 0, menuLo = false;
-function qualSave() { try { localStorage.setItem('driftloop_ql', QUAL + '|' + Date.now()); } catch(e) {} }
+function qualSave() { try { localStorage.setItem('driftloop_ql2', QUAL + '|' + Date.now()); } catch(e) {} }
 // Calidad: 'auto' (por defecto) mira el equipo y se va ajustando sola · 'maxima' y 'ahorro' solo si el jugador las elige
 const QSET = (function () { try { const p = JSON.parse(localStorage.getItem('driftloop_profile')); if (p && p.set && p.set.qv === 3 && p.set.quality) return p.set.quality; } catch(e) {} return 'auto'; })();
 const DEV_HI = (navigator.deviceMemory || 4) >= 8 && (navigator.hardwareConcurrency || 4) >= 8;      // gama alta
@@ -637,7 +637,8 @@ function resize() {
 }
 // nivel con el que arranca: el que quedó guardado (una vez por día prueba uno mejor) o, la primera vez, según el equipo
 if (!ECO) (function () { try {
-  const pp = String(localStorage.getItem('driftloop_ql') || '').split('|'), q = +pp[0], at = +pp[1] || 0;
+  try { localStorage.removeItem('driftloop_ql'); } catch(_) {}   // la vieja podía haber quedado baja por error
+  const pp = String(localStorage.getItem('driftloop_ql2') || '').split('|'), q = +pp[0], at = +pp[1] || 0;
   if (pp[0] !== '' && q >= 0 && q <= 3) { QUAL = q; if (q > 0 && Date.now() - at > 86400000) { QUAL = q - 1; qualSave(); } }
   else QUAL = DEV_LO ? 1 : 0;
 } catch(e) {} })();
@@ -1754,7 +1755,7 @@ function diagTick(raw, rms) {
   const d = diagD; d.n++; d.ft += raw*1000; d.rt += rms; d.mx = Math.max(d.mx, raw*1000); if (raw > 0.05) d.slow++;
   const now = performance.now(); if (now - d.t0 < 1000) return;
   const sec = (now - d.t0)/1000;
-  diagEl.textContent = `img/s ${(d.n/sec).toFixed(0)}  peor ${d.mx.toFixed(0)}ms  lentas ${d.slow}\ndibujo ${(d.rt/d.n).toFixed(1)}ms  bloque ${bakeMs.toFixed(0)}ms\ncalidad ${QUAL}${LOCK30 ? ' 30fijo' : ''}  efectos ${FXL}  res ${DPR.toFixed(2)}\nlienzo ${cv.width}x${cv.height}  bloques ${tiles.size}/${tileCap()}  nit ${TSC}\nmem ${(TILE_MEM/1048576)|0}MB  ${state}  ${(WX && WX.name) || ''}\nv${APP_VER || 'web'}  ${navigator.deviceMemory || '?'}GB ${navigator.hardwareConcurrency || '?'}núcleos  ${devicePixelRatio}x  ${innerWidth}x${innerHeight}`;
+  diagEl.textContent = `img/s ${(d.n/sec).toFixed(0)}  peor ${d.mx.toFixed(0)}ms  lentas ${d.slow}\ndibujo ${(d.rt/d.n).toFixed(1)}ms  auto ${((d.ht||0)/d.n).toFixed(1)}ms  bloque ${bakeMs.toFixed(0)}ms\ncalidad ${QUAL}${LOCK30 ? ' 30fijo' : ''}  efectos ${FXL}  res ${DPR.toFixed(2)}\nlienzo ${cv.width}x${cv.height}  bloques ${tiles.size}/${tileCap()}  nit ${TSC}\nmem ${(TILE_MEM/1048576)|0}MB  ${state}  ${(WX && WX.name) || ''}\nv${APP_VER || 'web'}  ${navigator.deviceMemory || '?'}GB ${navigator.hardwareConcurrency || '?'}núcleos  ${devicePixelRatio}x  ${innerWidth}x${innerHeight}`;
   diagD = { n: 0, ft: 0, rt: 0, mx: 0, slow: 0, t0: now };
 }
 function processBake(budgetMs) {
@@ -4892,7 +4893,7 @@ function pRender() {
   row('#pRace', 'Rivales', '', seg('rivals', [[3, '3'], [5, '5'], [7, '7']], applySettings));
   row('#pRace', 'Dificultad', champRace ? 'En las copas no se usa: cada copa tiene la suya' : 'Carrera libre y modos. Las copas tienen la suya', seg('diff', Object.entries(DIFFS).map(([k, v]) => [k, v[0]]), applySettings));
   if (!inRace) row('#pGame', 'Idioma', '🌐', seg('lang', [['auto', 'Auto'], ['es', 'Español'], ['en', 'English']], () => { saveProf(); location.reload(); }));
-  row('#pGfx', 'Calidad', 'Se aplica al volver a abrir el juego. Ahorro = menos batería', seg('quality', [['maxima', 'Máxima'], ['auto', 'Auto'], ['ahorro', 'Ahorro']], () => { try { localStorage.removeItem('driftloop_fxl'); localStorage.removeItem('driftloop_ql'); } catch(e) {} }));
+  row('#pGfx', 'Calidad', 'Se aplica al volver a abrir el juego. Ahorro = menos batería', seg('quality', [['maxima', 'Máxima'], ['auto', 'Auto'], ['ahorro', 'Ahorro']], () => { try { localStorage.removeItem('driftloop_fxl'); localStorage.removeItem('driftloop_ql2'); } catch(e) {} }));
   if (inRace) { const n = document.createElement('div'); n.className = 'note'; n.textContent = 'Los cambios de "Próxima carrera" se aplican al reiniciar o en la siguiente carrera.'; q('#pRace').appendChild(n); }
   { const v = document.createElement('div'); v.className = 'note'; v.style.cssText = 'text-align:center;opacity:.6;margin:14px 0 4px'; v.textContent = LX('Versión ', 'Version ') + (APP_VER || 'web'); pEl.querySelector('.wrap, .in, div').appendChild(v); }   // para saber qué versión tiene cada celular
 }
@@ -4922,14 +4923,14 @@ const MCSS = `
 #menu .logo{position:relative;text-align:center;margin-top:1.2vh;line-height:.82;transform:skewX(-9deg)}
 #menu .logo .l1{font-size:min(16vw,74px,8vh);font-weight:800;letter-spacing:-1px;color:#fff;text-shadow:0 6px 24px rgba(0,0,0,.6)}
 #menu .logo .l2{font-size:min(16vw,74px,8vh);font-weight:800;letter-spacing:-1px;color:#e1251b;margin-left:12%;
-  text-shadow:0 0 22px rgba(225,37,27,.55),0 6px 24px rgba(0,0,0,.6);animation:glow 2.6s ease-in-out infinite}
+  text-shadow:0 0 26px rgba(225,37,27,.65),0 6px 24px rgba(0,0,0,.6)}
 @keyframes glow{50%{text-shadow:0 0 34px rgba(255,60,40,.85),0 6px 24px rgba(0,0,0,.6)}}
-#menu .streak{position:absolute;height:3px;border-radius:2px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.85),transparent);animation:streak 1.6s linear infinite}
+#menu .streak{position:absolute;height:3px;border-radius:2px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.85),transparent);animation:streak 1.6s linear infinite;will-change:transform}
 @keyframes streak{from{transform:translateX(-120%)}to{transform:translateX(420%)}}
 #menu .tag{display:flex;align-items:center;justify-content:center;gap:10px;margin-top:8px;font-size:14px;font-weight:700;letter-spacing:5px;color:#c9d1d9}
 #menu .tag i{display:block;width:34px;height:3px;background:repeating-linear-gradient(90deg,#e1251b 0 8px,#fff 8px 16px)}
 #menu .hero{position:relative;flex:1;min-height:120px}
-#menu .hero canvas{position:absolute;inset:0;width:100%;height:100%}
+#menu .hero canvas{position:absolute;inset:0;width:100%;height:100%;will-change:transform}
 #menu .hero .cname{position:absolute;left:0;right:0;bottom:4px;text-align:center;font-size:15px;font-weight:700;letter-spacing:2px;color:#c9d1d9}
 #menu .hero .cname b{color:#fff;font-size:20px;font-style:italic;letter-spacing:.5px;margin-right:6px}
 #menu .cards{display:flex;gap:8px;padding:0 12px}
@@ -4960,9 +4961,9 @@ const MCSS = `
   background:linear-gradient(180deg,#ff3a2c,#c8150c);box-shadow:0 8px 26px rgba(225,37,27,.45),inset 0 1px 0 rgba(255,255,255,.35);
   font-size:32px;font-weight:800;font-style:italic;letter-spacing:1px}
 #menu .go span{position:relative;z-index:1;display:inline-block;transform:skewX(-8deg)}
-#menu .go::after{content:"";position:absolute;top:0;bottom:0;width:40%;left:-60%;transform:skewX(-20deg);
+#menu .go::after{content:"";position:absolute;top:0;bottom:0;width:40%;left:-60%;transform:skewX(-20deg);will-change:transform;
   background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);animation:shine 2.8s ease-in-out infinite}
-@keyframes shine{0%,55%{left:-60%}100%{left:130%}}
+@keyframes shine{0%,55%{transform:translateX(0) skewX(-20deg)}100%{transform:translateX(475%) skewX(-20deg)}}
 #menu .go:active{transform:scale(.98)}
 #menu .row2{display:flex;gap:8px;margin:8px 12px 0}
 #menu .go.cupgo{height:auto;min-height:70px;padding:8px 0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px}
@@ -5076,7 +5077,7 @@ function syncMenu(dt) {
   const want = state === 'menu' && !garageOpen && !reloading && !panelOpen && !introPhase;
   if (want && !menuShown) {
     menuShown = true; mEl.style.left = Math.round((innerWidth - W)/2) + 'px'; mEl.style.width = W + 'px';
-    mEl.style.display = 'flex'; mRender(true); requestAnimationFrame(heroLoop);
+    mEl.style.display = 'flex'; mRender(true);
   } else if (!want && menuShown) { menuShown = false; mEl.style.display = 'none'; }
   if (menuShown && !paused) {
     tipT += dt;
@@ -5117,7 +5118,6 @@ function heroLoop(now) {
       g.restore();
     }
   }
-  requestAnimationFrame(heroLoop);
 }
 
 /* =====================================================================
@@ -7854,7 +7854,7 @@ function cloudPayload() {
   const data = {}, ghosts = {};
   for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (!k || k.indexOf('driftloop_') !== 0) continue;
     if (k.indexOf('driftloop_ghost_') === 0) { if (k.indexOf('diaria') < 0) try { const g = JSON.parse(localStorage.getItem(k)); if (g && g.d) { const d = g.half ? [].concat(...g.d.map(r => [r, r])) : g.d; ghosts[k.slice(16)] = { t: g.t, model: g.model, L: g.L, e: encodeGhostData(d) }; } } catch(e) {} }
-    else if (k.indexOf('driftloop_rival_') !== 0 && !/^driftloop_(fb|cloudsync|daily_trk|fxl|did|ql)$/.test(k) && !/go$/.test(k)) data[k] = localStorage.getItem(k); }
+    else if (k.indexOf('driftloop_rival_') !== 0 && !/^driftloop_(fb|cloudsync|daily_trk|fxl|did|ql|ql2)$/.test(k) && !/go$/.test(k)) data[k] = localStorage.getItem(k); }
   return JSON.stringify({ v: 1, data, ghosts, did: DEV_ID, la: prof.savedAt || 0 });
 }
 function cloudApply(raw) {
@@ -7865,7 +7865,7 @@ function cloudApply(raw) {
     if (mine.qv) np.set.qv = mine.qv; else delete np.set.qv;
     p.data.driftloop_profile = JSON.stringify(np);
   } catch(e) {}
-  for (const k in p.data) if (k !== 'driftloop_ql' && k !== 'driftloop_fxl') localStorage.setItem(k, p.data[k]);   // calidad aprendida: de cada celular
+  for (const k in p.data) if (!/^driftloop_ql2?$/.test(k) && k !== 'driftloop_fxl') localStorage.setItem(k, p.data[k]);   // calidad aprendida: de cada celular
   for (const k in p.ghosts || {}) { const g = p.ghosts[k]; localStorage.setItem('driftloop_ghost_' + k, JSON.stringify({ t: g.t, model: g.model, L: g.L, d: decodeGhostData(g.e), half: 1 })); }
 }
 async function cloudPush() {
@@ -8142,7 +8142,7 @@ const ICSS = `
   background:radial-gradient(90% 60% at 50% 42%,rgba(5,7,11,.35),rgba(5,7,11,.92) 80%)}
 #splash .lg{text-align:center;line-height:.82;transform:skewX(-9deg);animation:spIn .9s cubic-bezier(.2,.9,.2,1) both}
 #splash .lg b{display:block;font-size:min(26vw,120px,13vh);font-weight:800;letter-spacing:-1px;text-shadow:0 6px 24px rgba(0,0,0,.6)}
-#splash .lg b.r{color:#e1251b;margin-left:14%;text-shadow:0 0 26px rgba(225,37,27,.6),0 6px 24px rgba(0,0,0,.6);animation:glow 2.6s ease-in-out infinite}
+#splash .lg b.r{color:#e1251b;margin-left:14%;text-shadow:0 0 26px rgba(225,37,27,.65),0 6px 24px rgba(0,0,0,.6)}
 #splash .tg{margin-top:14px;font-size:15px;font-weight:700;letter-spacing:6px;color:#c9d1d9;animation:spIn .9s .25s both}
 #splash .tap{margin-top:13vh;padding:12px 26px;border-radius:30px;font-size:24px;font-weight:800;font-style:italic;letter-spacing:1px;
   background:rgba(225,37,27,.92);box-shadow:0 0 0 0 rgba(225,37,27,.6);animation:spIn .7s .6s both,tapP 1.5s 1.3s ease-in-out infinite}
@@ -8297,17 +8297,18 @@ function frame(now) {
   try { if (introPhase) introTick(dt); if (!paused) { const ns = Math.max(1, Math.ceil(dt/0.034 - 1e-6)); for (let i = 0; i < ns && !paused; i++) { update(dt/ns); if (ttMode) ttTick(); if (licMode) licTick(); } } { const r0 = performance.now(); render(); if (DIAG) diagTick(raw, performance.now() - r0); } try { musicTick(); } catch(e) {} }
   catch (e) { errCount++; lastErr = String(e && e.message || e); lastErrT = performance.now(); if (errCount < 5) console.error(e); try { ctx.restore(); ctx.restore(); } catch(_) {} }
   syncMenu(dt); syncRes(dt);
+  if (menuShown) { const h0 = performance.now(); try { heroLoop(now); } catch(_) {} if (DIAG) diagD.ht = (diagD.ht || 0) + performance.now() - h0; }
   showErr();
   // calidad automática: mide de a 1 segundo; si no llega a 60 parejos, primero apaga efectos y después baja resolución y detalle
   perfT += raw;
   // emergencia: varias imágenes muy lentas seguidas (en cualquier pantalla) = el celular no da abasto; antes se ignoraban y la calidad nunca bajaba
-  if (!paused && !document.hidden && perfT > 1.5 && raw > 0.12 && raw < 3) {
+  if (!paused && !document.hidden && perfT > 1.5 && raw > 0.12 && raw < 3 && (state === 'race' || state === 'countdown')) {
     slowHits = slowHits.filter(t => now - t < 3000); slowHits.push(now);
     if (slowHits.length >= 3 && !LOCK30) { slowHits = []; while (fxDown()) {} if (QUAL < 3) { QUAL = 3; qualSave(); resize(); postCanvas = null; const t = tscFor(3); if (TSC > t) TSC = t; }
       else LOCK30 = true;
       TILE_MEM = Math.min(TILE_MEM, 32*1048576); clearTiles(); if (state === 'countdown' || state === 'race') preloadTrackTiles(); perfAcc = 0; perfN = 0; }
   }
-  if (perfT > 1 && !bakedNow && raw < 0.25 && !paused && (state === 'race' || state === 'countdown' || state === 'finish' || state === 'menu')) {
+  if (perfT > 1 && !bakedNow && raw < 0.25 && !paused && (state === 'race' || state === 'countdown' || state === 'finish')) {
     perfAcc += raw; perfN++;
     if (perfAcc > 1 || (perfAcc > 0.5 && perfAcc/perfN > 0.033)) {   // si va a los tirones, reacciona en medio segundo
       const avg = perfAcc/perfN - (ECO ? 0.0167 : 0), strict = QSET !== 'maxima', bad = avg > 0.033;   // en Ahorro (30 cuadros) se descuenta la espera propia
