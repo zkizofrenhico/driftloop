@@ -1464,7 +1464,7 @@ function tscFor(q) { return (MAXQ ? [1.5, 1.25, 1.0, 0.8] : [1.1, 1.0, 0.8, 0.7]
 let TSC = tscFor(QUAL);                               // resolución de los tiles (px por unidad de mundo)
 const tiles = new Map(), queued = new Set(); let bakeQueue = [], frameNo = 0;
 const MAX_TILES = MAXQ ? 52 : 46, tilePool = []; let tileNeed = 0;
-const TILE_MEM = (MAXQ ? 160 : DEV_LO ? 50 : 120)*1048576;   // memoria para bloques: cuantos más entran, menos se rearman
+let TILE_MEM = (MAXQ ? 120 : DEV_HI ? 96 : DEV_LO ? 32 : 48)*1048576;   // prudente: si se pasa del límite de la GPU, Android saca los dibujos de la placa y todo va a 1-3 cuadros   // memoria para bloques: cuantos más entran, menos se rearman
 function tileCap() { const px = Math.ceil((TS + TM*2)*TSC); return Math.max(tileNeed + 6, Math.min(90, Math.floor(TILE_MEM/(px*px*4)))); }
 let tilesBroken = false;
 const gridSlots = [];
@@ -1745,7 +1745,18 @@ function requestTile(i, j) {
   if (!queued.has(k)) { queued.add(k); bakeQueue.push([i, j]); }
   return null;
 }
-var bakedNow = false;
+var slowHits = [], bakedNow = false;
+// ---- diagnóstico oculto (tocar 5 veces el logo del menú): números reales del celular para ajustar el rendimiento ----
+let DIAG = false, diagTaps = [], diagEl = null, diagD = { n: 0, ft: 0, rt: 0, mx: 0, slow: 0, t0: 0 };
+function diagToggle() { DIAG = !DIAG; if (!diagEl) { diagEl = document.createElement('div'); diagEl.style.cssText = 'position:fixed;left:6px;top:42px;z-index:99;pointer-events:none;background:rgba(0,0,0,.78);color:#7CFF9B;font:600 12px/1.35 monospace;padding:6px 8px;border-radius:6px;white-space:pre;max-width:92vw'; document.body.appendChild(diagEl); }
+  diagEl.style.display = DIAG ? 'block' : 'none'; diagD = { n: 0, ft: 0, rt: 0, mx: 0, slow: 0, t0: performance.now() }; if (DIAG) diagEl.textContent = 'midiendo…'; }
+function diagTick(raw, rms) {
+  const d = diagD; d.n++; d.ft += raw*1000; d.rt += rms; d.mx = Math.max(d.mx, raw*1000); if (raw > 0.05) d.slow++;
+  const now = performance.now(); if (now - d.t0 < 1000) return;
+  const sec = (now - d.t0)/1000;
+  diagEl.textContent = `img/s ${(d.n/sec).toFixed(0)}  peor ${d.mx.toFixed(0)}ms  lentas ${d.slow}\ndibujo ${(d.rt/d.n).toFixed(1)}ms  bloque ${bakeMs.toFixed(0)}ms\ncalidad ${QUAL}${LOCK30 ? ' 30fijo' : ''}  efectos ${FXL}  res ${DPR.toFixed(2)}\nlienzo ${cv.width}x${cv.height}  bloques ${tiles.size}/${tileCap()}  nit ${TSC}\nmem ${(TILE_MEM/1048576)|0}MB  ${state}  ${(WX && WX.name) || ''}\n${navigator.deviceMemory || '?'}GB ${navigator.hardwareConcurrency || '?'}núcleos  ${devicePixelRatio}x  ${innerWidth}x${innerHeight}`;
+  diagD = { n: 0, ft: 0, rt: 0, mx: 0, slow: 0, t0: now };
+}
 function processBake(budgetMs) {
   if (!bakeQueue.length) return;
   const cx = cam.x/TS, cy = cam.y/TS;
@@ -1756,7 +1767,7 @@ function processBake(budgetMs) {
     let cv_;
     try { cv_ = bakeTile(i, j); }
     catch (e) { tilesBroken = true; clearTiles(); console.warn('Tiles desactivados:', e); return; }
-    const tb = performance.now() - t0;
+    const tb = performance.now() - t0; bakeMs = bakeMs*0.7 + tb*0.3;
     if (!introBake && tb > (MAXQ ? 160 : 90) && TSC > 0.7) { TSC = Math.max(0.7, TSC - 0.25); }   // equipo lento: tiles más livianos
     tiles.set(k, { c: cv_, used: frameNo });
     if (tiles.size > tileCap()) {   // se descarta el bloque usado hace más tiempo, nunca uno que se está viendo
@@ -1767,6 +1778,7 @@ function processBake(budgetMs) {
     }
   } while (bakeQueue.length && performance.now() - t0 < budgetMs);
 }
+let bakeMs = 0;
 function clearTiles() { tiles.clear(); queued.clear(); bakeQueue = []; tilePool.length = 0; }
 
 /* --------- Sprites: autos, sombras, humo, nubes --------- */
@@ -3798,7 +3810,8 @@ function render() {
       if (Math.hypot(nx - tA.x, ny - tA.y) <= r2) requestTile(i, j);
     }
   }
-  processBake(introBake ? 900 : missing ? 10 : state === 'countdown' ? 12 : 3); introBake = false;
+  if (introBake || missing || bakeMs < 25 || frameNo % Math.min(8, Math.ceil(bakeMs/12)) === 0) processBake(introBake ? 900 : missing ? 10 : state === 'countdown' ? 12 : 3);   // celular lento: los bloques que no se ven todavía se arman espaciados
+  introBake = false;
 
   ctx.save();
   ctx.translate(W*v.ax + sx, H*cam.ay + sy); ctx.scale(z, z); ctx.rotate(-cam.ang - Math.PI/2 + v.ao); ctx.translate(-cam.x + kickX, -cam.y + kickY);
@@ -5033,6 +5046,7 @@ function mRender(anim) {
          : `<button class="go${a(0.38)}" data-a="go"><span>CORRER ▶</span></button>`}
     <div class="row2${a(0.42)}"><button class="sec" data-a="free">🏁 ${EN ? 'FREE RACE' : 'CARRERA LIBRE'}</button><button class="sec" data-a="gar">🔧 ${EN ? 'GARAGE' : 'GARAJE'}</button></div>
     <div class="row3${a(0.46)}"><button class="sec gold" data-a="champ">🏆 ${EN ? 'CUPS' : 'COPAS'}</button><button class="sec" data-a="rank">🌎 ${EN ? 'RANKING' : 'RÁNKING'}</button><button class="sec" data-a="more">⭐ ${EN ? 'MORE' : 'MÁS'}${moreBadge() ? ' <span class="nb">' + moreBadge() + '</span>' : ''}</button><button class="sec ic" data-a="opt">⚙</button></div>`;
+  { const lg = mEl.querySelector('.logo'); if (lg) lg.onclick = () => { const n = performance.now(); diagTaps = diagTaps.filter(t => n - t < 2500); diagTaps.push(n); if (diagTaps.length >= 5) { diagTaps = []; diagToggle(); } }; }
   mEl.querySelectorAll('[data-a]').forEach(b => b.onclick = ev => {
     ev.stopPropagation(); const act = b.dataset.a;
     if (act === 'cupgo') { initAudio(); sfxBlip(880, 0.08); guideGo(); }
@@ -8277,13 +8291,20 @@ function frame(now) {
   if (tut && !paused) dt *= tutTick(dt);
   if (slowT > 0 && !paused) { slowT -= raw; dt *= 0.32; }   // cámara lenta al cruzar la meta
   if (hitStop > 0 && !paused) { hitStop -= raw; dt *= 0.04; }   // micro-pausa en un choque fuerte
-  try { if (introPhase) introTick(dt); if (!paused) { const ns = Math.max(1, Math.ceil(dt/0.034 - 1e-6)); for (let i = 0; i < ns && !paused; i++) { update(dt/ns); if (ttMode) ttTick(); if (licMode) licTick(); } } render(); try { musicTick(); } catch(e) {} }
+  try { if (introPhase) introTick(dt); if (!paused) { const ns = Math.max(1, Math.ceil(dt/0.034 - 1e-6)); for (let i = 0; i < ns && !paused; i++) { update(dt/ns); if (ttMode) ttTick(); if (licMode) licTick(); } } { const r0 = performance.now(); render(); if (DIAG) diagTick(raw, performance.now() - r0); } try { musicTick(); } catch(e) {} }
   catch (e) { errCount++; lastErr = String(e && e.message || e); lastErrT = performance.now(); if (errCount < 5) console.error(e); try { ctx.restore(); ctx.restore(); } catch(_) {} }
   syncMenu(dt); syncRes(dt);
   showErr();
   // calidad automática: mide de a 1 segundo; si no llega a 60 parejos, primero apaga efectos y después baja resolución y detalle
   perfT += raw;
-  if (perfT > 1 && !bakedNow && raw < 0.25 && !paused && (state === 'race' || state === 'countdown' || state === 'finish')) {
+  // emergencia: varias imágenes muy lentas seguidas (en cualquier pantalla) = el celular no da abasto; antes se ignoraban y la calidad nunca bajaba
+  if (!paused && !document.hidden && perfT > 1.5 && raw > 0.12 && raw < 3) {
+    slowHits = slowHits.filter(t => now - t < 3000); slowHits.push(now);
+    if (slowHits.length >= 3 && !LOCK30) { slowHits = []; while (fxDown()) {} if (QUAL < 3) { QUAL = 3; qualSave(); resize(); postCanvas = null; const t = tscFor(3); if (TSC > t) TSC = t; }
+      else LOCK30 = true;
+      TILE_MEM = Math.min(TILE_MEM, 32*1048576); clearTiles(); if (state === 'countdown' || state === 'race') preloadTrackTiles(); perfAcc = 0; perfN = 0; }
+  }
+  if (perfT > 1 && !bakedNow && raw < 0.25 && !paused && (state === 'race' || state === 'countdown' || state === 'finish' || state === 'menu')) {
     perfAcc += raw; perfN++;
     if (perfAcc > 1 || (perfAcc > 0.5 && perfAcc/perfN > 0.033)) {   // si va a los tirones, reacciona en medio segundo
       const avg = perfAcc/perfN - (ECO ? 0.0167 : 0), strict = QSET !== 'maxima', bad = avg > 0.033;   // en Ahorro (30 cuadros) se descuenta la espera propia
