@@ -1465,7 +1465,7 @@ function tscFor(q) { return (MAXQ ? [1.5, 1.25, 1.0, 0.8] : [1.1, 1.0, 0.8, 0.7]
 let TSC = tscFor(QUAL);                               // resolución de los tiles (px por unidad de mundo)
 const tiles = new Map(), queued = new Set(); let bakeQueue = [], frameNo = 0;
 const MAX_TILES = MAXQ ? 52 : 46, tilePool = []; let tileNeed = 0;
-let TILE_MEM = (MAXQ ? 120 : DEV_HI ? 96 : DEV_LO ? 32 : 48)*1048576;   // prudente: si se pasa del límite de la GPU, Android saca los dibujos de la placa y todo va a 1-3 cuadros   // memoria para bloques: cuantos más entran, menos se rearman
+let TILE_MEM = (MAXQ ? 64 : DEV_LO ? 32 : 48)*1048576;   // prudente: si se pasa del límite de la GPU, Android saca los dibujos de la placa y todo va a 1-3 cuadros   // memoria para bloques: cuantos más entran, menos se rearman
 function tileCap() { const px = Math.ceil((TS + TM*2)*TSC); return Math.max(tileNeed + 6, Math.min(90, Math.floor(TILE_MEM/(px*px*4)))); }
 let tilesBroken = false;
 const gridSlots = [];
@@ -3823,7 +3823,7 @@ function cloudPos(cl) {
 function render() {
   frameNo++;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  ctx.imageSmoothingEnabled = true; try { ctx.imageSmoothingQuality = 'high'; } catch(e) {}
+  ctx.imageSmoothingEnabled = true; try { ctx.imageSmoothingQuality = 'low'; } catch(e) {}
   const sx = shake ? rand(-shake, shake) : 0, sy = shake ? rand(-shake, shake) : 0;
   const v = camView(), z = v.zoom, R = visibleRadius(v);
 
