@@ -3418,6 +3418,7 @@ function onLap(c, ld) {
   if (first && ld === 0) { c.lapStartT = raceTime; return; }
   const lt = raceTime - c.lapStartT; c.lapStartT = raceTime; c.lastLap = lt;
   if (!c.bestLap || lt < c.bestLap) c.bestLap = lt;
+  if (c.isPlayer && !duoMode && !licMode) worldLap(lt);
   if (c.isPlayer && ttMode) ttOnLap(lt);
   if (c.lapsDone >= LAPS && !c.finished) {
     c.finished = true; c.finishTime = raceTime;
@@ -5026,7 +5027,7 @@ function mRender(anim) {
     ${gc ? `<button class="go cupgo${a(0.38)}" data-a="cupgo"><span>${cupLabel(gc)} ▶</span><small>${EN ? 'Race' : 'Carrera'} ${gc.round + 1}/${CUPS[gc.k].races.length} · ${TRACKS[CUPS[gc.k].races[gc.round].track].name}</small></button>`
          : `<button class="go${a(0.38)}" data-a="go"><span>CORRER ▶</span></button>`}
     <div class="row2${a(0.42)}"><button class="sec" data-a="free">🏁 ${EN ? 'FREE RACE' : 'CARRERA LIBRE'}</button><button class="sec" data-a="gar">🔧 ${EN ? 'GARAGE' : 'GARAJE'}</button></div>
-    <div class="row3${a(0.46)}"><button class="sec gold" data-a="champ">🏆 ${EN ? 'CUPS' : 'COPAS'}</button><button class="sec" data-a="more">⭐ ${EN ? 'MORE' : 'MÁS'}${moreBadge() ? ' <span class="nb">' + moreBadge() + '</span>' : ''}</button><button class="sec ic" data-a="opt">⚙</button></div>`;
+    <div class="row3${a(0.46)}"><button class="sec gold" data-a="champ">🏆 ${EN ? 'CUPS' : 'COPAS'}</button><button class="sec" data-a="rank">🌎 ${EN ? 'RANKING' : 'RÁNKING'}</button><button class="sec" data-a="more">⭐ ${EN ? 'MORE' : 'MÁS'}${moreBadge() ? ' <span class="nb">' + moreBadge() + '</span>' : ''}</button><button class="sec ic" data-a="opt">⚙</button></div>`;
   mEl.querySelectorAll('[data-a]').forEach(b => b.onclick = ev => {
     ev.stopPropagation(); const act = b.dataset.a;
     if (act === 'cupgo') { initAudio(); sfxBlip(880, 0.08); guideGo(); }
@@ -5042,6 +5043,7 @@ function mRender(anim) {
     else if (act === 'tt') openTTPanel();
     else if (act === 'lvl') openLevelPanel();
     else if (act === 'gar') openGarage();
+    else if (act === 'rank') openRanking();
     else if (act === 'opt') openPause(true);
     else if (act === 'tracks') { initAudio(); sfxBlip(880, 0.06); openTracksPanel(); }
     else if (act === 't-' || act === 't+') cycleTrackDir(act === 't+' ? 1 : -1);
@@ -6166,7 +6168,7 @@ function openTTPanel() {
     <div class="bar"><button class="s" data-a="back">VOLVER</button><button class="s ch2" data-a="dare">🤝 DESAFÍO</button><button class="s ch2" data-a="lg">🏆 TIEMPOS</button></div>`);
   xEl.querySelectorAll('[data-k]').forEach(b => b.onclick = () => { initAudio(); sfxBlip(900, 0.05); ttGo(b.dataset.k); });
   xEl.querySelector('[data-a="dare"]').onclick = () => { initAudio(); openChallengeImport(); };
-  xEl.querySelector('[data-a="lg"]').onclick = () => { initAudio(); lgSel = 0; lgWorld = true; lgWTrack = ''; openLeaguePanel(); lgRefresh(); };
+  xEl.querySelector('[data-a="lg"]').onclick = () => { initAudio(); lgSel = 0; lgFrom = 'tt'; lgWorld = true; lgWTrack = ''; openLeaguePanel(); lgRefresh(); };
   xEl.querySelector('[data-a="back"]').onclick = () => { initAudio(); hidePanel(); };
 }
 function openTTResults() {
@@ -6406,23 +6408,42 @@ async function lgGhost(code, id) { const d = await fsReq('GET', `/leagues/${code
 async function lgPush(code, track, t, g, model) {
   await fbToken();
   const name = (prof.name || 'PILOTO').slice(0, 12);
-  return fsReq('PATCH', `/leagues/${code}/times/${fbAuth.uid}_${track}`, fsEnc({ uid: fbAuth.uid, name, track, t: +t.toFixed(3), g, c: prof.col, m: MODELS[model] ? model : prof.model, at: Date.now() }));
+  const doc = { uid: fbAuth.uid, name, track, t: +t.toFixed(3), c: prof.col, m: MODELS[model] ? model : prof.model, at: Date.now() }; if (g) doc.g = g;   // vuelta de carrera: sin fantasma
+  return fsReq('PATCH', `/leagues/${code}/times/${fbAuth.uid}_${track}`, fsEnc(doc));
 }
 // sube a todas tus ligas el récord de un circuito (con su fantasma)
 function lgGhostFor(track) { try { const g = JSON.parse(localStorage.getItem('driftloop_ghost_' + track)); if (g && g.d && g.d.length > 10) return g; } catch(e) {} return null; }
 async function lgSyncTrack(track, onlyCode) {
   if (track === 'diaria') return 0;
-  const g = lgGhostFor(track), inf = prof.tt[track]; if (!g || !inf || !inf.best) return 0;
+  const g = lgGhostFor(track), inf = (prof.tt || {})[track], tt = g && inf && inf.best ? inf.best : 0, wb = (prof.wb || {})[track];
   let n = 0;
-  const dests = (prof.name ? [LG_WORLD] : []).concat(prof.leagues || []);   // con nombre puesto, tus récords van también a la tabla mundial
-  for (const L of dests) { if (onlyCode && L.code !== onlyCode) continue; try { await lgPush(L.code, track, inf.best, encodeGhostData(ghostRows(g)), g.model); n++; } catch(e) {} }
+  if (rankOn() && (!onlyCode || onlyCode === LG_WORLD.code)) {   // ránking mundial: tu mejor vuelta en cualquier modo
+    let t = 0, gg, m; if (tt) { t = tt; gg = encodeGhostData(ghostRows(g)); m = g.model; }
+    if (wb && wb.t > 5 && (!t || wb.t < t - 0.001)) { t = wb.t; gg = undefined; m = wb.m; }
+    const up = (prof.wbUp = prof.wbUp || {});
+    if (t && Math.abs((up[track] || 0) - t) > 0.0005) { try { await lgPush(LG_WORLD.code, track, t, gg, m); up[track] = t; saveProf(); n++; } catch(e) {} }
+  }
+  if (tt) for (const L of prof.leagues || []) { if (onlyCode && L.code !== onlyCode) continue; try { await lgPush(L.code, track, tt, encodeGhostData(ghostRows(g)), g.model); n++; } catch(e) {} }   // ligas de amigos: solo contrarreloj
   return n;
 }
-async function lgSyncAll(code) { let n = 0; for (const k in prof.tt) if (k !== 'diaria') n += await lgSyncTrack(k, code); return n; }
-function lgOnRecord() { if (((prof.leagues || []).length || prof.name) && TRACK_KEY !== 'diaria') lgSyncTrack(TRACK_KEY).then(n => { if (n && ttSession) ttSession.lgUp = n; }).catch(() => {}); }
+async function lgSyncAll(code) { let n = 0; const ks = new Set(Object.keys(prof.tt || {}).concat(Object.keys(prof.wb || {}))); for (const k of ks) if (k !== 'diaria' && TRACKS[k]) n += await lgSyncTrack(k, code); return n; }
+function rankOn() { return !!(fbAuth && fbAuth.google && prof.name); }   // para aparecer en el ránking: cuenta de Google + apodo
+function worldLap(lt) {
+  if (TRACK_KEY === 'diaria' || !(lt > 5) || !TRACKS[TRACK_KEY]) return;
+  const w = (prof.wb = prof.wb || {}), b = w[TRACK_KEY];
+  if (b && b.t <= lt + 0.001) return;
+  w[TRACK_KEY] = { t: +lt.toFixed(3), m: prof.model }; saveProf();
+  if (rankOn()) lgSyncTrack(TRACK_KEY, LG_WORLD.code).then(n => { if (n) lgWCache[TRACK_KEY] = null; }).catch(() => {});
+}
+function onGoogleLogin() {   // al entrar con Google: apodo con tu nombre (lo podés cambiar) y se suben tus récords al ránking
+  if (!prof.name && fbAuth && fbAuth.gname) { prof.name = String(fbAuth.gname).trim().split(/\s+/)[0].toUpperCase().replace(/[^A-Z0-9ÁÉÍÓÚÑÜ_.-]/g, '').slice(0, 12); saveProf(); }
+  lgSyncAll(LG_WORLD.code).then(() => { lgWCache = {}; if (panelOpen && xEl.querySelector('.lgw')) { openLeaguePanel(); lgRefresh(); } }).catch(() => {});
+}
+function openRanking() { initAudio(); lgFrom = 'menu'; lgWorld = true; lgWTrack = TRACK_KEY; openLeaguePanel(); lgRefresh(); }
+function lgOnRecord() { if (((prof.leagues || []).length || rankOn()) && TRACK_KEY !== 'diaria') lgSyncTrack(TRACK_KEY).then(n => { if (n && ttSession) ttSession.lgUp = n; }).catch(() => {}); }
 
 // ---- panel ----
-let lgSel = 0, lgCache = {}, lgWorld = true, lgWTrack = '', lgWCat = 'all', lgWCache = {};
+let lgSel = 0, lgCache = {}, lgWorld = true, lgWTrack = '', lgWCat = 'all', lgWCache = {}, lgFrom = 'tt';
 function lgErr(e) {
   const d = e && (e.detail || (e.name === 'AbortError' ? 'timeout' : e.name === 'TypeError' ? 'red bloqueada' : String(e.message || e)));
   return (!navigator.onLine ? 'Sin conexión a internet.' : e && e.status === 403 ? 'El servidor rechazó el pedido. Probá de nuevo.' : 'No se pudo conectar con el servidor de ligas.') + (d ? ` <small style="display:block;opacity:.7;font-size:12px">(${esc(d)})</small>` : '');
@@ -6468,7 +6489,8 @@ function openLeaguePanel(msg) {
   xEl.querySelectorAll('[data-g]').forEach(b => b.onclick = () => lgRaceGhost(lgWorld ? LG_WORLD : cur, b.dataset.g, b.dataset.k));
   xEl.querySelectorAll('[data-a]').forEach(b => b.onclick = async () => {
     initAudio(); const a = b.dataset.a;
-    if (a === 'back') { hidePanel(); openTTPanel(); return; }
+    if (a === 'back') { hidePanel(); if (lgFrom !== 'menu') openTTPanel(); return; }
+    if (a === 'glogin') { googleLogin(); return; }
     if (a === 'more') { lgSel = L.length; openLeagueJoin(); return; }
     if (a === 'wprev' || a === 'wnext') { const ks = TRACK_KEYS.filter(k => k !== 'diaria'), i = ks.indexOf(lgWTrack); lgWTrack = ks[(i + (a === 'wnext' ? 1 : ks.length - 1)) % ks.length]; openLeaguePanel(); lgRefresh(); return; }
     if (a === 'ref' && lgWorld) { lgWCache[lgWTrack] = null; openLeaguePanel(); lgRefresh(); return; }
@@ -6497,9 +6519,12 @@ function lgWorldBody(nameRow) {
       ${rows.slice(0, 20).map(row).join('')}${mi >= 20 ? '<div class="lgdots">⋯</div>' + row(rows[mi], mi) : ''}</div>`
       : `<div class="sub" style="text-align:center;margin:20px 0">${LX('Todavía nadie tiene tiempo acá. ¡Sé el primero!', 'No times here yet. Be the first!')}</div>`;
   }
-  const hint = prof.name ? LX('Tus récords de contrarreloj aparecen acá con tu nombre. Tocá un tiempo para correr contra ese fantasma.', 'Your time trial records show up here with your name. Tap a time to race that ghost.')
-                         : LX('Poné tu nombre para que tus récords de contrarreloj aparezcan en la tabla mundial.', 'Enter your name so your time trial records show up in the world ranking.');
-  return `<div class="lgw"><div class="sub">${hint}</div>${nameRow}
+  const g = fbAuth && fbAuth.google;
+  const hint = !g ? LX('Tu mejor vuelta de cada circuito, en cualquier modo, compite contra todos los jugadores. Entrá con Google para aparecer.', 'Your best lap on each track, in any mode, competes against every player. Sign in with Google to show up.')
+    : prof.name ? LX('Tu mejor vuelta de cada circuito aparece acá con tu apodo. Tocá un tiempo para correr contra su fantasma.', 'Your best lap on each track shows up here with your nickname. Tap a time to race its ghost.')
+    : LX('Elegí un apodo para aparecer en el ránking.', 'Pick a nickname to show up in the ranking.');
+  const login = g ? nameRow : `<button class="lgin" data-a="glogin"><b>G</b>${LX('ENTRAR CON GOOGLE', 'SIGN IN WITH GOOGLE')}</button>`;
+  return `<div class="lgw"><div class="sub">${hint}</div>${login}
     <div class="lgwtr"><button data-a="wprev">◀</button><div>${TRACK_SVG[k] || ''}<b>${TRACKS[k].name}</b></div><button data-a="wnext">▶</button><button data-a="ref">↻</button></div>
     <div class="lgtabs lgcats">${cats}</div>${list}</div>`;
 }
@@ -6550,7 +6575,7 @@ function lgInviteURL(L) {
 async function lgRaceGhost(L, id, track) {
   if (fbAuth && id.indexOf(fbAuth.uid + '_') === 0) return;
   try {
-    const d = await lgGhost(L.code, id); if (!d || !d.g) throw 0;
+    const d = await lgGhost(L.code, id); if (d && !d.g) { openLeaguePanel(LX('Ese tiempo se hizo en carrera: no tiene fantasma para correr.', 'That time was set in a race: there is no ghost to race.')); return; } if (!d) throw 0;
     const g = { name: String(d.name || 'AMIGO').toUpperCase().slice(0, 12), t: d.t, model: MODELS[d.m] ? d.m : 'gt', col: /^#[0-9a-f]{6}$/i.test(d.c) ? d.c : '#ff7a00',
                 L: 0, d: decodeGhostData(d.g), track, won: false };
     if (g.d.length < 10) throw 0;
@@ -6578,6 +6603,8 @@ async function lgRaceGhost(L, id, track) {
 #xp .lgwtr button{flex:none;width:40px;height:40px;border-radius:20px;background:rgba(255,255,255,.08);color:#fff;font-size:17px;border:0}
 #xp .lgr small.v{display:block;color:#9aa3ad;font-size:12px;font-weight:600}
 #xp .lgdots{text-align:center;color:#9aa3ad;line-height:1}
+#xp .lgin{width:100%;height:50px;margin:8px 0;font-size:18px;background:#fff!important;color:#1f1f1f!important;border:0;border-radius:25px;font-weight:800}
+#xp .lgin b{color:#4285f4;font-size:21px;margin-right:6px}
 #xp .lgcode{display:flex;align-items:center;gap:8px;padding:10px;border-radius:10px;background:rgba(255,210,63,.08);border:1px solid rgba(255,210,63,.35)}
 #xp .lgcode div{flex:1}
 #xp .lgcode small{display:block;font-size:12px;color:#9aa3ad;font-weight:700;letter-spacing:1px}
@@ -7071,13 +7098,31 @@ function showStreak(r) {
     const n = r.lost + 1, pay = STREAK_PAY(n); prof.money += Math.max(0, pay - r.pay); prof.streak.n = n; prof.streak.best = Math.max(prof.streak.best || 0, n); saveProf(); showStreak({ n, pay, lost: 0 }); };
   bkEl.querySelector('[data-b=ok]').onclick = () => { bkEl.style.display = 'none'; sfxBlip(1200, 0.08); if (menuShown) mRender(false); };
 }
+// ---- novedades: se muestran una sola vez después de actualizar ----
+const NEWS_V = 1;
+function showNews(tries) {
+  if ((prof.news || 0) >= NEWS_V) return;
+  if (!prof.tut || (prof.races || 0) < 1) { prof.news = NEWS_V; saveProf(); return; }   // los nuevos lo descubren solos
+  const busy = bkEl.style.display === 'flex' || !menuShown || (typeof introPhase !== 'undefined' && introPhase) || panelOpen;
+  if (busy) { if ((tries || 0) < 60) setTimeout(() => showNews((tries || 0) + 1), 3000); return; }
+  prof.news = NEWS_V; saveProf();
+  bkEl.innerHTML = `<div class="box" style="text-align:center"><h3>🌎 ${LX('NUEVO: RÁNKING MUNDIAL', 'NEW: WORLD RANKING')}</h3>
+    <p>${LX('Tu mejor vuelta de cada circuito compite contra todos los jugadores. Entrá con Google, elegí tu apodo y mirá en qué puesto estás. ¿Podés subir?', 'Your best lap on each track competes against every player. Sign in with Google, pick a nickname and see where you rank. Can you climb?')}</p>
+    <p class="sub" style="opacity:.8">${LX('Está en el menú: botón 🌎 RÁNKING.', 'It is in the menu: 🌎 RANKING button.')}</p>
+    <div class="row"><button data-b="no">${LX('DESPUÉS', 'LATER')}</button><button class="go" data-b="ok">${LX('VER RÁNKING', 'SEE RANKING')}</button></div></div>`;
+  bkEl.style.display = 'flex';
+  bkEl.querySelector('[data-b=no]').onclick = () => { bkEl.style.display = 'none'; };
+  bkEl.querySelector('[data-b=ok]').onclick = () => { bkEl.style.display = 'none'; openRanking(); };
+}
+setTimeout(() => showNews(0), 6500);
+setTimeout(() => { try { if (rankOn()) lgSyncAll(LG_WORLD.code).catch(() => {}); } catch(e) {} }, 9000);   // por si hiciste récords sin conexión
 // ---- aviso de versión nueva (solo en la app instalada desde Google Play) ----
 let updAsked = false;
 async function checkAppUpdate(tries) {
   const AUp = NP('AppUpdate'); if (!AUp || updAsked) return;
   let info; try { info = await AUp.getAppUpdateInfo(); } catch(e) { return; }   // instalada fuera de Play o sin conexión: no se avisa
   if (!info || info.updateAvailability !== 2) return;
-  const busy = bkEl.style.display === 'flex' || !menuShown || (typeof introPhase !== 'undefined' && introPhase);
+  const busy = bkEl.style.display === 'flex' || !menuShown || (typeof introPhase !== 'undefined' && introPhase) || panelOpen;
   if (busy) { if ((tries || 0) < 40) setTimeout(() => checkAppUpdate((tries || 0) + 1), 3000); return; }   // espera a estar en el menú, sin otro cartel abierto
   updAsked = true;
   bkEl.innerHTML = `<div class="box" style="text-align:center"><h3>⬆ ${LX('HAY UNA VERSIÓN NUEVA', 'NEW VERSION AVAILABLE')}</h3>
@@ -7859,7 +7904,7 @@ function googleLogin() {
     google.accounts.id.initialize({ client_id: G_CLIENT, auto_select: false, callback: async r => {
       msg.style.color = '#ffd23f'; msg.textContent = 'Conectando…';
       try { let link = null; try { link = fbAuth && !fbAuth.google ? await fbToken() : null; } catch(e) {}
-            fbAuth = await fbSignInGoogle(r.credential, link); fbSave(); bkEl.style.display = 'none'; popup('☁ Conectado', '#3dff8a', true); if (paused) pRender(); cloudPull(true); }
+            fbAuth = await fbSignInGoogle(r.credential, link); fbSave(); bkEl.style.display = 'none'; popup('☁ Conectado', '#3dff8a', true); if (paused) pRender(); cloudPull(true); onGoogleLogin(); }
       catch(e) { msg.style.color = '#ff8a7a'; msg.textContent = 'No se pudo iniciar sesión. Probá de nuevo.'; }
     } });
     google.accounts.id.renderButton(bkEl.querySelector('#gbtn'), { theme: 'filled_black', size: 'large', shape: 'pill', text: 'continue_with', locale: EN ? 'en' : 'es-419' });
@@ -7874,7 +7919,7 @@ async function nativeLoginUrl(url) {
   if (!q.rt) return;
   try { const B = NP('Browser'); B && B.close().catch(() => {}); } catch(e) {}
   fbAuth = { refreshToken: q.rt, uid: q.uid, exp: 0, google: true, email: q.e || '', gname: q.n || '' }; fbSave();
-  try { await fbToken(); fbAuth.google = true; fbAuth.email = q.e || ''; fbAuth.gname = q.n || ''; fbSave(); popup('☁ Conectado', '#3dff8a', true); if (paused) pRender(); cloudPull(true); }
+  try { await fbToken(); fbAuth.google = true; fbAuth.email = q.e || ''; fbAuth.gname = q.n || ''; fbSave(); popup('☁ Conectado', '#3dff8a', true); if (paused) pRender(); cloudPull(true); onGoogleLogin(); }
   catch(e) { popup('No se pudo iniciar sesión', '#ff8a7a', true); }
 }
 if (NATIVE) { try { const A = NP('App'); A && A.addListener('appUrlOpen', ev => { if (ev && ev.url && ev.url.indexOf('driftloop://login') === 0) nativeLoginUrl(ev.url); }); } catch(e) {} }
