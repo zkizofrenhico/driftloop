@@ -4008,14 +4008,13 @@ function drawNight(R) {
   for (const lp of lamps) {
     if (!nearCam(lp.hx, lp.hy, R + 300)) continue;
     ctx.globalAlpha = 0.95; ctx.drawImage(puffGlowWarm, lp.hx - 26, lp.hy - 26, 52, 52);
-    if (FXL >= 3 && QUAL === 0) { ctx.globalAlpha = WX.wet ? 0.16 : 0.1; ctx.drawImage(puffGlowWarm, lp.cx - 230, lp.cy - 230, 460, 460); }
   }
   for (const c of cars) {
     if (!nearCam(c.wx, c.wy, R + 200)) continue;
     const fx = Math.cos(c.va), fy = Math.sin(c.va), nx = -fy, ny = fx, half = c.co + c.cr, sd = c.cr - 3;
     ctx.globalAlpha = 0.9;
     for (const s of [-1, 1]) ctx.drawImage(puffGlowWarm, c.wx + fx*(half - 1) + nx*sd*s - 9, c.wy + fy*(half - 1) + ny*sd*s - 9, 18, 18);
-    if (c.isPlayer || (FXL >= 3 && QUAL === 0)) { ctx.globalAlpha = 0.13; ctx.drawImage(puffGlowWarm, c.wx + fx*130 - 120, c.wy + fy*130 - 120, 240, 240); }
+    if (c.isPlayer) { ctx.globalAlpha = 0.13; ctx.drawImage(puffGlowWarm, c.wx + fx*130 - 120, c.wy + fy*130 - 120, 240, 240); }
     const brake = (state === 'race' || state === 'finish') && !c.throttle && c.v > 20, ts = brake ? 30 : 16;
     ctx.globalAlpha = brake ? 0.95 : 0.7;
     for (const s of [-1, 1]) ctx.drawImage(puffGlowRed, c.wx - fx*half + nx*sd*s - ts/2, c.wy - fy*half + ny*sd*s - ts/2, ts, ts);
