@@ -627,8 +627,9 @@ const MAXQ = QSET === 'maxima';   // 'Máxima' solo si el jugador la elige (ante
 const ECO = QSET === 'ahorro';
 let LOCK30 = false;                                       // último recurso: 30 cuadros parejos en vez de ir a los saltos
 const QCAP = MAXQ ? [3, 2, 1.5, 1] : ECO ? [1.25, 1, 1, 0.6] : [2, 1.5, 1, 0.6];   // el último nivel es para celulares que no dan abasto: menos nitidez pero fluido   // límite de resolución por nivel de calidad
+let rsVW = 0, rsVH = 0;
 function resize() {
-  const vw = innerWidth, vh = innerHeight;
+  const de = document.documentElement, vw = de.clientWidth || innerWidth, vh = de.clientHeight || innerHeight; rsVW = vw; rsVH = vh;
   W = vw > vh ? Math.round(vh*0.6) : vw; H = vh;   // en escritorio simula un celular vertical
   DPR = Math.min(QCAP[QUAL], devicePixelRatio || 1, Math.sqrt((MAXQ ? 2.0e6 : 1.5e6)/Math.max(1, W*H)));   // tope de píxeles totales
   if (menuLo) DPR = Math.min(DPR, 1.5);   // en el menú la pista es solo el fondo: menos resolución, mucho más liviano
@@ -642,7 +643,9 @@ if (!ECO) (function () { try {
   if (pp[0] !== '' && q >= 0 && q <= 3) { QUAL = q; if (q > 0 && Date.now() - at > 86400000) { QUAL = q - 1; qualSave(); } }
   else QUAL = DEV_LO ? 1 : 0;
 } catch(e) {} })();
-addEventListener('resize', resize); resize();
+addEventListener('resize', resize); try { visualViewport && visualViewport.addEventListener('resize', resize); } catch(e) {} resize();
+// algunos celulares (con zoom de pantalla) informan el tamaño real recién después de arrancar y sin avisar: se revisa seguido
+setInterval(() => { const de = document.documentElement; if ((de.clientWidth || innerWidth) !== rsVW || (de.clientHeight || innerHeight) !== rsVH) { dispatchEvent(new Event('resize')); postCanvas = null; } }, 500);
 
 const FONT = '"Barlow Condensed", "Arial Narrow", sans-serif';
 try { document.fonts && ['italic 800 20px', 'italic 700 20px', '600 20px', '700 20px', '800 20px'].forEach(f => document.fonts.load(f + ' "Barlow Condensed"')); } catch(e) {}
