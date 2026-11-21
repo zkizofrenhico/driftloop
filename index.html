@@ -8334,7 +8334,7 @@ function frame(now) {
   showErr();
   // calidad automática: mide de a 1 segundo; si no llega a 60 parejos, primero apaga efectos y después baja resolución y detalle
   perfT += raw;
-  if (!bakedNow) { const j = performance.now() - fj0; jsEma = jsEma ? jsEma*0.95 + j*0.05 : j; }   // las imágenes que arman pista nueva no cuentan (son picos aislados)
+  if (!bakedNow) { const j = Math.min(25, performance.now() - fj0); jsEma = jsEma ? jsEma*0.95 + j*0.05 : j; }   // tope: una imagen suelta larga (armar la carrera) no puede disparar la baja   // las imágenes que arman pista nueva no cuentan (son picos aislados)
   { const qsc = (LOCK30 ? 100 : 0) + QUAL*10 + (3 - FXL); if (qPrev >= 0 && qsc > qPrev) qNoUp = true; qPrev = qsc; }   // si bajó por carga real, en esta sesión no vuelve a subir (nada de sube y baja)
   // solo se baja la calidad si el juego de verdad trabaja mucho por imagen; si el celular va lento por otra cosa (el sistema, otra app), bajar la resolución no ayuda y solo se ve feo
   const heavy = jsEma > 9;
@@ -8348,13 +8348,13 @@ function frame(now) {
       qPrev = (LOCK30 ? 100 : 0) + QUAL*10 + (3 - FXL); }
   } else if (jsEma >= 4.5) goodT = 0;
   // emergencia: varias imágenes muy lentas seguidas (en cualquier pantalla) = el celular no da abasto; antes se ignoraban y la calidad nunca bajaba
-  if (!BENCH && !paused && !document.hidden && perfT > 1.5 && raw > 0.12 && raw < 3 && heavy && (state === 'race' || state === 'countdown')) {
+  if (!BENCH && !paused && !document.hidden && perfT > 1.5 && raw > 0.12 && raw < 3 && heavy && state === 'race' && stateT > 2) {
     slowHits = slowHits.filter(t => now - t < 3000); slowHits.push(now);
     if (slowHits.length >= 3 && !LOCK30) { slowHits = []; while (fxDown()) {} if (QUAL < 3) { QUAL = 3; qualSave(); resize(); postCanvas = null; const t = tscFor(3); if (TSC > t) TSC = t; }
       else LOCK30 = true;
       TILE_MEM = Math.min(TILE_MEM, 32*1048576); clearTiles(); if (state === 'countdown' || state === 'race') preloadTrackTiles(); perfAcc = 0; perfN = 0; }
   }
-  if (!BENCH && perfT > 1 && !bakedNow && raw < 0.25 && !paused && (state === 'race' || state === 'countdown' || state === 'finish')) {
+  if (!BENCH && perfT > 1 && !bakedNow && raw < 0.25 && !paused && (state === 'race' && stateT > 2 || state === 'finish')) {
     perfAcc += raw; perfN++;
     if (perfAcc > 1 || (perfAcc > 0.5 && perfAcc/perfN > 0.033)) {   // si va a los tirones, reacciona en medio segundo
       const avg = perfAcc/perfN - (ECO ? 0.0167 : 0), strict = QSET !== 'maxima', bad = avg > 0.033 && heavy;   // en Ahorro (30 cuadros) se descuenta la espera propia
