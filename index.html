@@ -438,7 +438,7 @@ const TRACKS = {
     [-350,1850],[-450,1450],[-250,1150],[-450,850],[-400,450],[-250,120]] },
   rally: { name: 'Rallycross', theme: 'pasto', cp: [[0,0],[650,0],[1050,60],[1300,350],[1080,640],[650,580],[360,780],[430,1120],[800,1220],[1200,1160],
     [1550,1220],[1680,1530],[1460,1840],[1050,1880],[720,1730],[380,1770],[40,1880],[-330,1700],[-400,1280],[-130,1000],[-390,660],[-430,290],[-270,70]],
-    surf: [[0.17, 0.42, 'tierra'], [0.56, 0.76, 'grava'], [0.76, 0.88, 'tierra']] },
+    surf: [[0, 0.42, 'tierra'], [0.42, 0.76, 'grava'], [0.76, 1, 'tierra']] },   // rally: toda la pista de tierra y grava, nada de asfalto
   valle: { name: 'Valle Verde', theme: 'pasto', cp: [[113,0],[263,0],[413,0],[563,0],[713,0],[863,0],[1013,0],[1163,0],[1360,28],[1477,139],[1513,333],[1575,500],[1718,583],[1923,601],[2057,684],[2103,853],[2094,1003],[2088,1155],[2084,1310],[2083,1467],[2058,1674],[1949,1791],[1757,1816],[1593,1754],[1513,1605],[1499,1389],[1416,1246],[1246,1195],[1093,1201],[940,1204],[786,1204],[631,1200],[428,1165],[319,1052],[302,861],[256,696],[119,607],[-89,597],[-233,674],[-292,839],[-323,1038],[-438,1159],[-638,1200],[-806,1155],[-886,1019],[-888,802],[-886,650],[-886,497],[-889,345],[-867,144],[-758,29],[-637,0],[-487,0],[-337,0],[-187,0],[-37,0]] },
   dunas: { name: 'Dunas', theme: 'desierto', cp: [[113,0],[263,0],[413,0],[563,0],[713,0],[863,0],[1013,0],[1163,0],[1359,29],[1468,146],[1492,351],[1431,526],[1288,613],[1081,632],[941,716],[887,885],[863,1081],[756,1192],[566,1216],[403,1267],[323,1398],[316,1602],[314,1822],[309,1972],[302,2126],[240,2301],[102,2391],[-96,2397],[-234,2317],[-294,2153],[-330,1959],[-446,1846],[-644,1815],[-812,1753],[-896,1606],[-905,1383],[-905,1231],[-905,1008],[-904,792],[-903,571],[-903,421],[-902,268],[-844,96],[-703,10],[-637,0],[-487,0],[-337,0],[-187,0],[-37,0]] },
   canon: { name: 'Cañón Rojo', theme: 'desierto', cp: [[39, 0], [244, 0], [452, 0], [668, 0], [876, 0], [1081, 0], [1272, 23], [1386, 167], [1394, 354], [1505, 507], [1694, 543], [1849, 599], [1932, 725], [1942, 913], [1838, 1068], [1659, 1107], [1509, 1168], [1423, 1300], [1397, 1499], [1392, 1703], [1404, 1908], [1399, 2106], [1251, 2239], [1043, 2255], [899, 2188], [831, 2037], [814, 1821], [817, 1616], [841, 1399], [809, 1236], [676, 1141], [523, 1116], [356, 1150], [279, 1287], [280, 1442], [237, 1612], [99, 1686], [-53, 1682], [-266, 1671], [-466, 1674], [-658, 1687], [-855, 1688], [-1063, 1675], [-1268, 1632], [-1382, 1530], [-1419, 1356], [-1425, 1170], [-1418, 972], [-1394, 769], [-1305, 642], [-1146, 596], [-953, 573], [-838, 408], [-828, 193], [-753, 53], [-599, 0], [-382, 0], [-178, 0]], surf: [[0.30,0.44,'tierra'],[0.62,0.78,'tierra']] },
@@ -542,10 +542,10 @@ if (DAILY) TRACKS.diaria = { name: DAILY.name, theme: DAILY.theme, cp: DAILY.cp,
 TRACKS.superovalo = { name: 'Súper Óvalo', theme: 'pasto', cp: [[0,0],[720,0],[1440,0],[2160,0],[2880,0],[3600,0],[4224,208],[4480,768],[4240,1344],[3600,1536],[2880,1536],[2240,1616],[1840,2000],[1360,2304],[640,2336],[0,2336],[-608,2128],[-864,1568],[-864,768],[-608,208]] };
 // Circuito de Gran Premio: recta principal muy larga para pasar con rebufo, eses rápidas y horquillas amplias
 TRACKS.granpremio = { name: 'Circuito Gran Premio', theme: 'pasto', cp: [[0,0],[700,0],[1400,0],[2100,0],[2800,0],[3500,0],[4060,168],[4312,630],[4130,1120],[3640,1330],[3220,1610],[3290,2100],[3010,2520],[2450,2590],[2030,2310],[1610,2030],[1120,2170],[840,2590],[350,2730],[-210,2520],[-490,2030],[-350,1470],[-700,1050],[-840,560],[-560,168]] };
-// Etapas de rally: usan un trazado que ya existe, pero casi todo es tierra, grava o nieve (solo la recta de largada es asfalto)
-if (TRACKS.bosque) TRACKS.rsierra = Object.assign({}, TRACKS.bosque, { name: 'Rally de la Sierra', rally: true, surf: [[0.07, 0.3, 'tierra'], [0.3, 0.46, 'grava'], [0.46, 0.8, 'tierra'], [0.8, 0.95, 'grava']] });
-if (TRACKS.canon) TRACKS.rdesierto = Object.assign({}, TRACKS.canon, { name: 'Rally del Desierto', rally: true, surf: [[0.07, 0.36, 'grava'], [0.36, 0.62, 'tierra'], [0.62, 0.95, 'grava']] });
-if (TRACKS.nevado) TRACKS.rblanco = Object.assign({}, TRACKS.nevado, { name: 'Rally Blanco', rally: true, surf: [[0.07, 0.5, 'nieve'], [0.5, 0.62, 'tierra'], [0.62, 0.95, 'nieve']] });
+// Etapas de rally: usan un trazado que ya existe, todo de tierra, grava o nieve (nada de asfalto)
+if (TRACKS.bosque) TRACKS.rsierra = Object.assign({}, TRACKS.bosque, { name: 'Rally de la Sierra', rally: true, surf: [[0, 0.3, 'tierra'], [0.3, 0.46, 'grava'], [0.46, 0.8, 'tierra'], [0.8, 1, 'grava']] });
+if (TRACKS.canon) TRACKS.rdesierto = Object.assign({}, TRACKS.canon, { name: 'Rally del Desierto', rally: true, surf: [[0, 0.36, 'grava'], [0.36, 0.62, 'tierra'], [0.62, 1, 'grava']] });
+if (TRACKS.nevado) TRACKS.rblanco = Object.assign({}, TRACKS.nevado, { name: 'Rally Blanco', rally: true, surf: [[0, 0.5, 'nieve'], [0.5, 0.62, 'tierra'], [0.62, 1, 'nieve']] });
 const TRACK_KEYS = Object.keys(TRACKS);
 let TRACK_KEY = 'autodromo';
 try {
@@ -1133,7 +1133,8 @@ if (TRK.surf) for (const [a, b, t] of TRK.surf) {
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
   for (let i = i0; i <= i1; i++) { const j = i % TR.N; x0 = Math.min(x0, TR.X[j]); x1 = Math.max(x1, TR.X[j]); y0 = Math.min(y0, TR.Y[j]); y1 = Math.max(y1, TR.Y[j]); }
   const o = {}, ends = [];
-  for (const i of [i0, i1 % TR.N]) { worldPos(i*TR.step, 0, o); ends.push([o.wx, o.wy]); }
+  for (const i of [i0, i1 % TR.N]) { if (TRK.surf.some(x => x !== null && ((i === 0 && x[1] >= 1) || (i === i1 % TR.N && i1 >= TR.N && x[0] <= 0)))) continue;   // donde se unen dos tramos sueltos (sin asfalto en el medio) no hay borde
+    worldPos(i*TR.step, 0, o); ends.push([o.wx, o.wy]); }
   surfSegs.push({ i0, i1, ti, path: offsetPath(0, i0, i1, 2), ruts: [offsetPath(i => apexD(i), i0, i1, 2)],
                   line: offsetPath(apexD, i0, i1, 2), ends, bb: [x0 - 140, y0 - 140, x1 + 140, y1 + 140] });
 }
@@ -1577,6 +1578,8 @@ function bakeTile(ti, tj) {
   for (const cn of corners) if (near(cn.bb)) for (const m of cn.marks) { g.strokeStyle = 'rgba(10,10,12,.16)'; g.save(); g.translate(0, 0); g.stroke(m); g.translate(-TR.TY[cn.i0]*9, TR.TX[cn.i0]*9); g.stroke(m); g.restore(); }
   // Líneas blancas de borde
   g.lineWidth = 2.6; g.strokeStyle = 'rgba(238,238,232,.9)'; g.stroke(edgeL); g.stroke(edgeR);
+  // primero todos los bordes y después todos los pisos: así donde se juntan dos tramos sueltos no queda un arco de borde cruzando la pista
+  for (const sg of surfSegs) if (near(sg.bb)) { g.lineWidth = (HALF_W + CURB)*2 + 18; g.strokeStyle = SURF_STYLE[sg.ti].edge; g.stroke(sg.path); }
   for (const sg of surfSegs) if (near(sg.bb)) {
     const st = SURF_STYLE[sg.ti];
     for (const [ex, ey] of sg.ends) {          // el piso suelto "se derrama" sobre el asfalto
@@ -1584,7 +1587,6 @@ function bakeTile(ti, tj) {
       gr.addColorStop(0, st.spill); gr.addColorStop(1, 'rgba(110,78,48,0)');
       g.fillStyle = gr; g.fillRect(ex - 110, ey - 110, 220, 220);
     }
-    g.lineWidth = (HALF_W + CURB)*2 + 18; g.strokeStyle = st.edge; g.stroke(sg.path);
     g.lineWidth = (HALF_W + CURB)*2; g.strokeStyle = pat(st.tex()); g.stroke(sg.path);
     if (st.over) { g.strokeStyle = st.over; g.stroke(sg.path); }
     if (st.line) { g.lineWidth = 34; g.strokeStyle = st.line; g.stroke(sg.line); }
@@ -4112,16 +4114,6 @@ function drawWeatherOverlay() {
       if (!flakeSpr) flakeSpr = mkFlakeSpr();
       const hard = WX_KEY === 'tormenta', tt = performance.now()*0.001, gust = hard ? 0.6 + 0.4*Math.sin(tt*0.9)*Math.sin(tt*0.37 + 1.3) : 0;
       if (hard) { ctx.fillStyle = `rgba(235,242,250,${(0.10 + 0.14*gust).toFixed(3)})`; ctx.fillRect(0, 0, W, H); }   // bruma blanca de la ventisca
-      ctx.globalAlpha = WX.night ? 0.8 : 1;
-      for (const d of rainDrops) {
-        const z = (d.l - 14)/16;   // 0 = lejos (chico, lento) · 1 = cerca (grande, rápido)
-        const fall = (hard ? 150 : 70) + 110*z, wind = hard ? (260 + 340*gust)*(0.6 + 0.6*z) : 22;
-        d.y += fall*dt; d.x += (wind + Math.sin(tt*1.4 + d.l*3)*(hard ? 40 : 28))*dt;
-        if (d.y > H + 12 || d.x > W + 12) { if (hard && Math.random() < 0.6) { d.x = -rand(0, 30); d.y = rand(-20, H); } else { d.y = -rand(0, 40); d.x = rand(-W*0.3, W); } }
-        const sz = 3 + 7*z*z;
-        if (hard && z > 0.4) ctx.drawImage(flakeSpr, d.x - sz*1.6, d.y - sz/2, sz*3.2, sz);   // estirado por el viento
-        else ctx.drawImage(flakeSpr, d.x - sz/2, d.y - sz/2, sz, sz);
-      }
       ctx.globalAlpha = 1;
     } else {
     ctx.beginPath();
@@ -7481,7 +7473,7 @@ const LICS = [
   { k: 'R', name: 'LICENCIA R · RALLY', en: 'R LICENSE · RALLY', col: '#d39a4a', track: 'rsierra', need: ['B'], prize: 3000, gold: 6000, tests: [
     { id: 'R1', name: 'Tierra suelta', en: 'Loose dirt', car: 'r4x4', frac: 0.35, t: [10.1, 9.7, 9.2] },
     { id: 'R2', name: 'De costado con tracción trasera', en: 'Sideways with rear-wheel drive', car: 'rcoupe', frac: 0.6, t: [19.5, 18.1, 17.1] },
-    { id: 'R3', name: 'Etapa completa', en: 'Full stage', car: 'r4x4', frac: 1, t: [28.8, 26.7, 25.3] } ] },
+    { id: 'R3', name: 'Etapa completa', en: 'Full stage', car: 'r4x4', frac: 1, t: [28.9, 26.8, 25.4] } ] },
   { k: 'C', name: 'LICENCIA C · CAMIONES', en: 'C LICENSE · TRUCKS', col: '#8fb3d9', track: 'valle', need: ['B'], prize: 3000, gold: 6000, tests: [
     { id: 'C1', name: 'Frenada larga', en: 'Long braking', car: 'camion', frac: 0.4, t: [8.8, 8.1, 7.7] },
     { id: 'C2', name: 'Vuelta completa sin pisar el pasto', en: 'Full lap, stay off the grass', car: 'camion', frac: 1, rule: 'clean', t: [22.8, 21.1, 20.0] },
