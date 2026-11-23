@@ -2926,8 +2926,8 @@ function audioUpdate(dt, held) {
   const rk = quiet ? 0 : WX.rainK;
   if (THEME.snow) {   // nevada / ventisca: viento, no lluvia
     const hard = WX_KEY === 'tormenta', tt = t*(hard ? 1.6 : 1), gust = 0.5 + 0.5*Math.sin(tt*0.9)*Math.sin(tt*0.37 + 1.3);
-    AU.rnG.gain.setTargetAtTime(0, t, 0.3); AU.rdG.gain.setTargetAtTime((hard ? 0.05 : 0.02)*rk, t, 0.3);
-    if (AU.snG) { AU.snG.gain.setTargetAtTime(rk*(hard ? 0.05 + 0.11*gust : 0.025 + 0.04*gust), t, 0.25);
+    AU.rnG.gain.setTargetAtTime(0, t, 0.3); AU.rdG.gain.setTargetAtTime(hard ? 0.05*rk : 0, t, 0.3);   // la nevada es silenciosa; solo la ventisca tiene viento
+    if (AU.snG) { AU.snG.gain.setTargetAtTime(hard ? rk*(0.05 + 0.11*gust) : 0, t, 0.25);
       AU.snBp.frequency.setTargetAtTime((hard ? 420 : 320) + 380*gust, t, 0.3); AU.snBp2.frequency.setTargetAtTime((hard ? 800 : 650) + 600*gust, t, 0.3); }
   } else {
     AU.rnG.gain.setTargetAtTime(0.09*rk, t, 0.3); AU.rdG.gain.setTargetAtTime(0.12*rk, t, 0.3);
@@ -4121,6 +4121,14 @@ function drawWeatherOverlay() {
       if (!flakeSpr) flakeSpr = mkFlakeSpr();
       const hard = WX_KEY === 'tormenta', tt = performance.now()*0.001, gust = hard ? 0.6 + 0.4*Math.sin(tt*0.9)*Math.sin(tt*0.37 + 1.3) : 0;
       if (hard) { ctx.fillStyle = `rgba(235,242,250,${(0.10 + 0.14*gust).toFixed(3)})`; ctx.fillRect(0, 0, W, H); }   // bruma blanca de la ventisca
+      else {   // nevada: pocos copos, chicos y lentos, que caen parejo (sin brillo ni parpadeo)
+        ctx.globalAlpha = 0.55*Math.min(1, WX.rainK);
+        const nn = Math.min(rainDrops.length, 60);
+        for (let i = 0; i < nn; i++) { const d = rainDrops[i], z = (d.l - 14)/16;
+          d.y += (22 + 26*z)*dt; d.x += (Math.sin(tt*0.6 + d.l*2.3)*12 + 6)*dt;
+          if (d.y > H + 8 || d.x > W + 8) { d.y = -rand(0, 30); d.x = rand(-W*0.1, W); }
+          const sz = 2.5 + 3*z; ctx.drawImage(flakeSpr, d.x - sz/2, d.y - sz/2, sz, sz); }
+      }
       ctx.globalAlpha = 1;
     } else {
     ctx.beginPath();
