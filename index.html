@@ -862,20 +862,37 @@ async function nativeShareClip(blob, name) {
 }
 // ---- gotas de lluvia sobre la "lente" de la cámara ----
 const LENS = [];
+let dropSpr = null;
+function mkDropSpr() {   // gota sobre vidrio: borde oscuro arriba, luz concentrada abajo, brillo chico; sin aro de burbuja
+  const S = 64, c = mkCanvas(S, S), g = c.getContext('2d'), r = 26, cx = 32, cy = 33;
+  g.save(); g.beginPath(); g.ellipse(cx, cy, r*0.92, r, 0, 0, 7); g.clip();
+  let gr = g.createLinearGradient(0, cy - r, 0, cy + r);
+  gr.addColorStop(0, 'rgba(10,16,26,.55)'); gr.addColorStop(0.35, 'rgba(60,75,95,.22)'); gr.addColorStop(0.7, 'rgba(190,205,225,.20)'); gr.addColorStop(1, 'rgba(240,248,255,.55)');
+  g.fillStyle = gr; g.fillRect(0, 0, S, S);
+  gr = g.createRadialGradient(cx, cy + r*0.55, 1, cx, cy + r*0.55, r*0.7); gr.addColorStop(0, 'rgba(255,255,255,.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, S, S);
+  g.restore();
+  g.fillStyle = 'rgba(255,255,255,.85)'; g.beginPath(); g.ellipse(cx - r*0.38, cy - r*0.45, r*0.16, r*0.1, -0.6, 0, 7); g.fill();
+  return c;
+}
 function drawLensRain() {
   if (THEME.snow || FXL < (WX.night ? 1 : 3) || !(WX.rainK > 0.35) || state === 'menu') { LENS.length = 0; return; }
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   const dt = Math.min(0.05, lastDt || 0.016), n = Math.round(12*WX.rainK);
-  if (LENS.length < n && Math.random() < 0.08*WX.rainK*WX.rainK) LENS.push({ x: Math.random()*W, y: Math.random()*H*0.85, r: rand(3, 9), t: 0, life: rand(1.5, 4), v: 0 });
+  if (!dropSpr) dropSpr = mkDropSpr();
+  if (LENS.length < n && Math.random() < 0.08*WX.rainK*WX.rainK) { const r = rand(3.5, 10); LENS.push({ x: Math.random()*W, y: Math.random()*H*0.85, y0: 0, r, sq: rand(0.85, 1.2), t: 0, life: rand(1.8, 4.5), v: 0, slide: r > 5.5 && Math.random() < 0.7 }); }
   for (let i = LENS.length - 1; i >= 0; i--) {
-    const d = LENS[i]; d.t += dt; if (d.t > d.life) { LENS.splice(i, 1); continue; }
-    if (d.r > 6.5) { d.v += 40*dt; d.y += d.v*dt; }
-    const a = Math.min(1, d.t*4, (d.life - d.t)*2)*0.5;
-    ctx.globalAlpha = a; ctx.strokeStyle = 'rgba(255,255,255,.45)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, 7); ctx.stroke();
-    ctx.fillStyle = 'rgba(200,220,255,.12)'; ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.beginPath(); ctx.arc(d.x - d.r*0.35, d.y - d.r*0.4, d.r*0.22, 0, 7); ctx.fill();
+    const d = LENS[i]; d.t += dt; if (d.t > d.life || d.y > H + 20) { LENS.splice(i, 1); continue; }
+    if (d.slide && d.t > 0.4) { if (!d.y0) d.y0 = d.y; d.v = Math.min(120, d.v + 60*dt); d.y += d.v*dt; d.x += Math.sin(d.t*7 + d.r)*6*dt; }
+    const a = Math.min(1, d.t*5, (d.life - d.t)*1.5);
+    if (d.y0 && d.y - d.y0 > 2) {   // rastro mojado que deja al resbalar
+      ctx.globalAlpha = a*0.25; ctx.strokeStyle = 'rgba(200,215,235,.6)'; ctx.lineWidth = Math.max(1, d.r*0.45); ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(d.x, Math.max(d.y0, d.y - 34)); ctx.lineTo(d.x, d.y - d.r*0.6); ctx.stroke();
+    }
+    ctx.globalAlpha = a; const w = d.r*2*d.sq, h = d.r*2*(d.slide && d.v > 30 ? 1.25 : 1);
+    ctx.drawImage(dropSpr, d.x - w/2, d.y - h/2, w, h);
   }
-  ctx.globalAlpha = 1;
+  ctx.globalAlpha = 1; ctx.lineCap = 'butt';
 }
 // Clima y hora del día
 const WEATHERS = {
@@ -4040,6 +4057,15 @@ function drawNight(R) {
 }
 /* ---------- Atardecer, cielo nublado, lluvia en pantalla y relámpagos ---------- */
 const rainDrops = [];
+let flakeSpr = null;
+function mkFlakeSpr() {   // copo suave con borde gris: se ve también sobre la nieve blanca
+  const c = mkCanvas(32, 32), g = c.getContext('2d');
+  let gr = g.createRadialGradient(16, 17, 2, 16, 17, 15); gr.addColorStop(0, 'rgba(80,95,120,.45)'); gr.addColorStop(1, 'rgba(80,95,120,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 32, 32);
+  gr = g.createRadialGradient(16, 15, 1, 16, 15, 10); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.6, 'rgba(250,252,255,.9)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 32, 32);
+  return c;
+}
 let gradeW = 0, gradeH = 0, gradeDay = null, gradeDusk = null;
 function drawWeatherOverlay() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -4060,18 +4086,25 @@ function drawWeatherOverlay() {
   }
   if (WX.skyK > 0 && !WX.night) { ctx.fillStyle = `rgba(30,40,58,${(0.26*WX.skyK).toFixed(3)})`; ctx.fillRect(0, 0, W, H); }
   if (WX.wet) {
-    const n = Math.round((QUAL >= 2 ? 70 : WX.night ? 120 : MAXQ ? 240 : 140)*WX.rainK);
+    const n = Math.round((QUAL >= 2 ? 70 : WX.night ? 120 : MAXQ ? 240 : 140)*WX.rainK*(THEME.snow ? (WX_KEY === 'tormenta' ? 2 : 1.3) : 1));
     if (rainDrops.length > n) rainDrops.length = n;
     while (rainDrops.length < n) rainDrops.push({ x: Math.random()*W, y: Math.random()*H, l: rand(14, 30), s: rand(900, 1400) });
     const dx = 0.22, dt = Math.min(0.05, lastDt || 0.016);
     if (THEME.snow) {   // en la nieve, la "lluvia" es nevada
-      ctx.fillStyle = WX.night ? 'rgba(220,230,250,.6)' : 'rgba(255,255,255,.85)';
-      const tt = performance.now()*0.001;
+      if (!flakeSpr) flakeSpr = mkFlakeSpr();
+      const hard = WX_KEY === 'tormenta', tt = performance.now()*0.001, gust = hard ? 0.6 + 0.4*Math.sin(tt*0.9)*Math.sin(tt*0.37 + 1.3) : 0;
+      if (hard) { ctx.fillStyle = `rgba(235,242,250,${(0.10 + 0.14*gust).toFixed(3)})`; ctx.fillRect(0, 0, W, H); }   // bruma blanca de la ventisca
+      ctx.globalAlpha = WX.night ? 0.8 : 1;
       for (const d of rainDrops) {
-        d.y += d.s*0.12*dt; d.x += Math.sin(tt*1.3 + d.l)*30*dt + 18*dt;
-        if (d.y > H + 10 || d.x > W + 10) { d.y = -rand(0, 40); d.x = rand(-W*0.2, W); }
-        const r = d.l*0.09; ctx.fillRect(d.x - r, d.y - r, r*2, r*2);
+        const z = (d.l - 14)/16;   // 0 = lejos (chico, lento) · 1 = cerca (grande, rápido)
+        const fall = (hard ? 150 : 70) + 110*z, wind = hard ? (260 + 340*gust)*(0.6 + 0.6*z) : 22;
+        d.y += fall*dt; d.x += (wind + Math.sin(tt*1.4 + d.l*3)*(hard ? 40 : 28))*dt;
+        if (d.y > H + 12 || d.x > W + 12) { if (hard && Math.random() < 0.6) { d.x = -rand(0, 30); d.y = rand(-20, H); } else { d.y = -rand(0, 40); d.x = rand(-W*0.3, W); } }
+        const sz = 3 + 7*z*z;
+        if (hard && z > 0.4) ctx.drawImage(flakeSpr, d.x - sz*1.6, d.y - sz/2, sz*3.2, sz);   // estirado por el viento
+        else ctx.drawImage(flakeSpr, d.x - sz/2, d.y - sz/2, sz, sz);
       }
+      ctx.globalAlpha = 1;
     } else {
     ctx.beginPath();
     for (const d of rainDrops) {
