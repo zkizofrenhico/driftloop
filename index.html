@@ -3025,6 +3025,13 @@ let shake = 0, shownPos = 0, posPendT = 0, resultsReady = false;
 let kickX = 0, kickY = 0, hitStop = 0;   // golpe de cámara con dirección y micro-pausa en choques fuertes
 const rec = { bestRace: 0, bestLap: 0, wins: 0 };
 const RSFX = TRACK_KEY === 'autodromo' ? '' : '_' + TRACK_KEY + (TRACK_KEY === 'diaria' && DAILY ? '_' + DAILY.date : '');   // récords separados por circuito
+if (!prof.rkReset) {   // los circuitos de rally se rehicieron (todo suelto): se borran récords, medallas de contrarreloj, mejores vueltas y fantasmas viejos
+  for (const k of ['rally', 'rsierra', 'rdesierto', 'rblanco']) {
+    if (prof.tt) delete prof.tt[k]; if (prof.wb) delete prof.wb[k]; if (prof.wbUp) delete prof.wbUp[k];
+    try { localStorage.removeItem('driftloop_ghost_' + k); localStorage.removeItem('driftloop_rival_' + k); localStorage.removeItem('driftloop_bestrace_' + k); localStorage.removeItem('driftloop_bestlap2_' + k); } catch(e) {}
+  }
+  prof.rkReset = 1; try { saveProf(); } catch(e) {}
+}
 try { rec.bestRace = +localStorage.getItem('driftloop_bestrace' + RSFX) || 0; rec.bestLap = +localStorage.getItem('driftloop_bestlap2' + RSFX) || 0; rec.wins = +localStorage.getItem('driftloop_wins') || 0; } catch(e) {}
 let newRaceRec = false, newLapRec = false;
 const popups = [], parts = [];
@@ -6488,12 +6495,16 @@ async function fsReq(method, path, body) {
 // ---- operaciones de liga ----
 // tabla mundial: una "liga" fija que ven todos (las reglas de Firestore ya permiten sus tiempos)
 const LG_WORLD = { code: 'MUNDIAL', name: 'MUNDIAL', world: true };
+// circuitos de rally rehechos (toda la pista suelta): sus tiempos viejos ya no valen, así que el ránking usa una clave nueva y los viejos no se muestran
+const RK_RESET = { rally: 1, rsierra: 1, rdesierto: 1, rblanco: 1 };
+const rkT = k => RK_RESET[k] ? k + '_v2' : k;
+function rkFix(arr) { return arr.filter(x => !RK_RESET[x.track]).map(x => { if (x.track && /_v2$/.test(x.track)) x.track = x.track.slice(0, -3); return x; }); }
 const LG_WCATS = [['all', 'Todos', 'All'], ['', 'Autos', 'Cars'], ['rally', 'Rally', 'Rally'], ['truck', 'Camiones', 'Trucks'], ['formula', 'Fórmula', 'Formula'], ['moto', 'Motos', 'Bikes']];
 async function lgWorldTimes(track) {   // solo los tiempos de un circuito
   const f = ['uid', 'name', 'track', 't', 'c', 'm', 'at'].map(fieldPath => ({ fieldPath }));
   const j = await fsReq('POST', `/leagues/${LG_WORLD.code}:runQuery`, { structuredQuery: { from: [{ collectionId: 'times' }],
-    where: { fieldFilter: { field: { fieldPath: 'track' }, op: 'EQUAL', value: { stringValue: track } } }, select: { fields: f }, limit: 2000 } });
-  return (j || []).filter(x => x.document).map(x => Object.assign({ id: x.document.name.split('/').pop() }, fsDec(x.document)));
+    where: { fieldFilter: { field: { fieldPath: 'track' }, op: 'EQUAL', value: { stringValue: rkT(track) } } }, select: { fields: f }, limit: 2000 } });
+  return rkFix((j || []).filter(x => x.document).map(x => Object.assign({ id: x.document.name.split('/').pop() }, fsDec(x.document))));
 }
 const LG_ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 function lgName() { const n = prof.name || 'PILOTO', s = EN ? "'S LEAGUE" : ' Y AMIGOS'; return (n + s).slice(0, 24); }
@@ -6516,14 +6527,14 @@ async function lgTimes(code) {
     for (const d of j.documents || []) out.push(Object.assign({ id: d.name.split('/').pop() }, fsDec(d)));
     if (!j.nextPageToken) break; tok = j.nextPageToken;
   }
-  return out;
+  return rkFix(out);
 }
 async function lgGhost(code, id) { const d = await fsReq('GET', `/leagues/${code}/times/${id}`); return d ? fsDec(d) : null; }
 async function lgPush(code, track, t, g, model) {
   await fbToken();
   const name = (prof.name || 'PILOTO').slice(0, 12);
-  const doc = { uid: fbAuth.uid, name, track, t: +t.toFixed(3), c: prof.col, m: MODELS[model] ? model : prof.model, at: Date.now() }; if (g) doc.g = g;   // vuelta de carrera: sin fantasma
-  return fsReq('PATCH', `/leagues/${code}/times/${fbAuth.uid}_${track}`, fsEnc(doc));
+  const doc = { uid: fbAuth.uid, name, track: rkT(track), t: +t.toFixed(3), c: prof.col, m: MODELS[model] ? model : prof.model, at: Date.now() }; if (g) doc.g = g;   // vuelta de carrera: sin fantasma
+  return fsReq('PATCH', `/leagues/${code}/times/${fbAuth.uid}_${rkT(track)}`, fsEnc(doc));
 }
 // sube a todas tus ligas el récord de un circuito (con su fantasma)
 function lgGhostFor(track) { try { const g = JSON.parse(localStorage.getItem('driftloop_ghost_' + track)); if (g && g.d && g.d.length > 10) return g; } catch(e) {} return null; }
@@ -8064,7 +8075,7 @@ async function deleteAccountData() {
     .then(r => { if (!r.ok && r.status !== 404) { const e = new Error('del ' + r.status); e.status = r.status; e.what = path.split('/')[1]; throw e; } });
   const del = path => del1(path).catch(e => e.status === 403 ? Promise.reject(e) : new Promise(r => setTimeout(r, 600)).then(() => del1(path)));   // un reintento si falla la red
   const paths = [];
-  for (const L of [LG_WORLD].concat(prof.leagues || [])) for (const k of TRACK_KEYS) paths.push(`/leagues/${L.code}/times/${uid}_${k}`);
+  for (const L of [LG_WORLD].concat(prof.leagues || [])) for (const k of TRACK_KEYS) { paths.push(`/leagues/${L.code}/times/${uid}_${k}`); if (RK_RESET[k]) paths.push(`/leagues/${L.code}/times/${uid}_${rkT(k)}`); }
   for (let i = 0; i < paths.length; i += 6) await Promise.all(paths.slice(i, i + 6).map(del));   // de a 6, para no saturar la conexión
   await del(`/saves/${uid}`);
   let gone = false;
