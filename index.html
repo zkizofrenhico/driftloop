@@ -878,7 +878,7 @@ function mkDropSpr() {   // gota sobre vidrio: borde oscuro arriba, luz concentr
   return c;
 }
 function drawLensRain() {
-  if (THEME.snow || FXL < (WX.night ? 1 : 3) || !(WX.rainK > 0.35) || state === 'menu') { LENS.length = 0; return; }
+  if (THEME.snow || !(WX.rainK > 0.35) || state === 'menu') { LENS.length = 0; return; }   // siempre que llueve (son pocas y livianas), con cualquier calidad
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   const dt = Math.min(0.05, lastDt || 0.016), n = Math.round(12*WX.rainK);
   if (!dropSpr) dropSpr = mkDropSpr();
