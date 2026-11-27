@@ -557,7 +557,7 @@ for (const key of Object.keys(TRACKS)) { const f = DL2_STRETCH[key] || [1,1]; DL
 for (const [key, track] of Object.entries(TRACKS)) {
   if (DL2_STRETCH[key]) { const [sx,sy] = DL2_STRETCH[key]; track.cp = track.cp.map(([x,y]) => [Math.round(x*sx),Math.round(y*sy)]); }
   delete track.surf;
-  if (key === 'rally') track.surf = [[0.32,0.75,'tierra']];
+  if (key === 'rally') track.surf = [[0,1,'tierra']];   // rally: toda la pista suelta, nada de asfalto
   else if (key === 'rsierra' || key === 'rdesierto' || key === 'dunas') track.surf = [[0,1,'tierra']];
   else if (key === 'rblanco' || track.theme === 'nieve') track.surf = [[0,1,'nieve']];
 }
@@ -623,6 +623,8 @@ function dl2LengthRatio(key) {
   return dl2Ratios[key] = (key === TRACK_KEY ? TR.L : buildTrack(cp).L) / buildTrack(cp.map(([x,y])=>[x/sx,y/sy])).L;
 }
 
+// Math.hypot es lento y genera basura en cada llamada; con dos números alcanza la raíz común (mismo resultado)
+{ const H = Math.hypot; Math.hypot = function (a, b, c) { return c === undefined ? (b === undefined ? Math.abs(a) : Math.sqrt(a*a + b*b)) : H.apply(Math, arguments); }; }
 function sample(s, o) {
   s = ((s % TR.L) + TR.L) % TR.L;
   const f = s/TR.step; let i = f|0; const t = f - i; if (i >= TR.N) i = 0; const j = (i+1) % TR.N;
@@ -3201,11 +3203,18 @@ function applyModel(c, key, st) {
   c.loose = m.loose || 0; c.gripMul = st.grip + (m.grip - 1)*1.5; c.wtMul = st.wt; c.mass = m.mass || 1; c.moto = !!m.moto; c.low = !!m.low; c.steerMul = (st.steer || 1)*(m.steerK || 1); c.brakeMul = (st.brake || 1)*(m.brakeK || 1); c.vmaxMul = st.vmax; c.accMul = st.acc;   // el agarre de cada vehículo pesa más que antes
 }
 function makeCar(isPlayer) {
-  return { isPlayer, name: 'VOS', col: '#d7141a', acc: '#f4f4f0', stripe: 'doble', model: 'gt', cr: 10.5, co: 11, ka: 13, kb: 13, kL: 26, kI: 170,
+  const c = { isPlayer, name: 'VOS', col: '#d7141a', acc: '#f4f4f0', stripe: 'doble', model: 'gt', cr: 10.5, co: 11, ka: 13, kb: 13, kL: 26, kI: 170,
     gripMul: 1, wtMul: 1, steerMul: 1, brakeMul: 1, va: 0, vaV: 0, dist: 0, d: 0, vd: 0, v: 0, yaw: 0, spin: 0, spinV: 0,
     excess: 0, skid: 0, slip: 0, reverse: false, stuckT: 0, revT: 0, load: 0, onGrass: false, wasGrass: false, wx: 0, wy: 0, ang: 0, wheels: [null, null], laneT: 0,
     vmaxMul: 1, accMul: 1, skill: 1, skillNow: 1, pref: 0, aggr: 0, otT: 0, otLane: 0, decT: 0, mistakeT: rand(2, 5),
-    lapsDone: -1, lapStartT: 0, lastLap: 0, bestLap: 0, finished: false, finishTime: 0, pos: 0, hitCd: 0, draft: false, throttle: false };
+    lapsDone: -1, lapStartT: 0, lastLap: 0, bestLap: 0, finished: false, finishTime: 0, pos: 0, hitCd: 0, draft: false, throttle: false,
+    // todos los campos que se agregan después, ya declarados acá y en el mismo orden: así todos los autos tienen la misma "forma" interna
+    // y el motor de JavaScript no tiene que rehacer el código rápido ni crear basura en cada cuadro (eso daba tirones)
+    loose: 0, mass: 1, moto: false, low: false, mistakeP: 0.12, x: 0.5, y: 0.5, h: 0.5, vx: 0.5, vy: 0.5, r: 0.5, steer: 0.5, axL: 0.5, idx: 0, sPrev: 0.5,
+    spr: null, num: 0, bonus: 0, earn: 0, st: null, trafficFront: null, rb: 0.5, puddle: false, surf: null, lastFyR: 0.5, vp: 0.5, vr: 0.5, dmg: 0, dents: null,
+    dlDamage: null, broken: null, stallT: 0.5, boostT: 0.5, popFx: 0.5, lean: 0.5, wobT: 0.5, airT: 0, airDur: 0, height: 0, splashT: 0 };
+  c.x = c.y = c.h = c.vx = c.vy = c.r = c.steer = c.axL = c.sPrev = c.rb = c.lastFyR = c.vp = c.vr = c.stallT = c.boostT = c.popFx = c.lean = c.wobT = 0;
+  return c;
 }
 
 function showcaseWx() {
@@ -3539,7 +3548,9 @@ function startCountdown() { adReset(); try { qualRaceStart(); } catch(e) {} try 
    - Círculo de fricción atrás: acelerar en plena curva le resta agarre lateral a la cola.
    - Dirección automática (pure pursuit) que contravolantea sola cuando la cola se va.
    ===================================================================== */
-const tA = {}, tB = {}, tC = {}, tD = {};
+// objetos de trabajo reutilizables: todos los campos declarados de entrada (como números con decimales) para que no generen basura
+const mkTmp = () => ({ x: 0.5, y: 0.5, tx: 0.5, ty: 0.5, k: 0.5, ang: 0.5, wx: 0.5, wy: 0.5 });
+const tA = mkTmp(), tB = mkTmp(), tC = mkTmp(), tD = mkTmp();
 const VEH = { a: 13, b: 13, L: 26, I: 170, Icol: 230, tireB: 14, tireC: 1.3, steerMax: 0.65, steerRate: 6, counter: 1.6, rearBias: 0.53 };
 function tire(al) { return Math.sin(VEH.tireC*Math.atan(VEH.tireB*al)); }
 
