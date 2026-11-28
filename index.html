@@ -615,6 +615,13 @@ function buildTrack(cp) {
 }
 const TR = buildTrack(CP);
 const dl2Ratios = {};
+// Las pistas de la 2.0 se agrandaron, y con eso las curvas quedaron más abiertas y fáciles (casi no hacía falta soltar).
+// Para que vuelvan a exigir como antes sin acortarlas, el agarre en curva baja según cuánto se agrandó cada pista.
+let trkGripKey = '', trkGripV = 1;
+function trkGrip() {
+  if (trkGripKey !== TRACK_KEY) { trkGripKey = TRACK_KEY; const f = DL2_STRETCH[TRACK_KEY]; trkGripV = f ? Math.pow(Math.sqrt(f[0]*f[1]), -0.55) : 1; }
+  return trkGripV;
+}
 function dl2LengthRatio(key) {
   if (dl2Ratios[key]) return dl2Ratios[key];
   const [sx,sy] = DL2_STRETCH[key] || [1,1];
@@ -672,7 +679,7 @@ if (!ECO) (function () { try {
 } catch(e) {} })();
 addEventListener('resize', resize); try { visualViewport && visualViewport.addEventListener('resize', resize); } catch(e) {} resize();
 // algunos celulares (con zoom de pantalla) informan el tamaño real recién después de arrancar y sin avisar: se revisa seguido
-setInterval(() => { const de = document.documentElement; if ((de.clientWidth || innerWidth) !== rsVW || (de.clientHeight || innerHeight) !== rsVH) { dispatchEvent(new Event('resize')); postCanvas = null; } }, 500);
+setInterval(() => { if (document.hidden) return; const de = document.documentElement; if ((de.clientWidth || innerWidth) !== rsVW || (de.clientHeight || innerHeight) !== rsVH) { dispatchEvent(new Event('resize')); postCanvas = null; } }, 500);
 
 const FONT = '"Barlow Condensed", "Arial Narrow", sans-serif';
 try { document.fonts && ['italic 800 20px', 'italic 700 20px', '600 20px', '700 20px', '800 20px'].forEach(f => document.fonts.load(f + ' "Barlow Condensed"')); } catch(e) {}
@@ -1876,7 +1883,8 @@ function diagTick(raw, rms) {
 function processBake(budgetMs) {
   if (!bakeQueue.length) return;
   const cx = cam.x/TS, cy = cam.y/TS;
-  bakeQueue.sort((a, b) => Math.hypot(a[0] + 0.5 - cx, a[1] + 0.5 - cy) - Math.hypot(b[0] + 0.5 - cx, b[1] + 0.5 - cy));
+  const dist2 = p => { const dx = p[0] + 0.5 - cx, dy = p[1] + 0.5 - cy; return dx*dx + dy*dy; };
+  bakeQueue.sort((a, b) => dist2(a) - dist2(b));
   const t0 = performance.now(); bakedNow = true;
   do {
     const [i, j] = bakeQueue.shift(), k = i + ',' + j; queued.delete(k);
@@ -1895,7 +1903,12 @@ function processBake(budgetMs) {
   } while (bakeQueue.length && performance.now() - t0 < budgetMs);
 }
 let bakeMs = 0;
-function clearTiles() { tiles.clear(); queued.clear(); bakeQueue = []; tilePool.length = 0; }
+function clearTiles() {
+  // These canvases belong exclusively to the track cache. Release their backing stores.
+  for (const v of tiles.values()) { v.c.width = 0; v.c.height = 0; }
+  for (const c of tilePool) { c.width = 0; c.height = 0; }
+  tiles.clear(); queued.clear(); bakeQueue = []; tilePool.length = 0;
+}
 
 /* --------- Sprites: autos, sombras, humo, nubes --------- */
 /* =====================================================================
@@ -2034,7 +2047,26 @@ for (const f of ['col', 'acc', 'stripe']) Object.defineProperty(prof, f, { enume
 const UPG0 = Object.freeze({ motor: 0, caja: 0, neum: 0, susp: 0, frenos: 0 });
 function upgOf(k, make) { let u = prof.upgs[k]; if (!u && make) u = prof.upgs[k] = { motor: 0, caja: 0, neum: 0, susp: 0, frenos: 0 }; return u || UPG0; }
 function upgLevels() { let n = 0; for (const k in prof.upgs) for (const j in prof.upgs[k]) n += prof.upgs[k][j] || 0; return n; }
-function saveProf() { prof.savedAt = Date.now(); try { localStorage.setItem('driftloop2test_profile', JSON.stringify(prof)); } catch(e) {} try { if (cloudOn()) cloudSoon(); } catch(e) {} }
+// Guardado inmediato de cambios reales; no modificar el sello si falla la escritura.
+let profileSavePending = false;
+function saveProf() {
+  const prev = prof.savedAt;
+  try {
+    const key = 'driftloop2test_profile';
+    if (localStorage.getItem(key) === JSON.stringify(prof)) { profileSavePending = false; return true; }
+    prof.savedAt = Math.max(Date.now(), (Number(prev) || 0) + 1);
+    localStorage.setItem(key, JSON.stringify(prof));
+    profileSavePending = false;
+  } catch(e) {
+    if (prev === undefined) delete prof.savedAt; else prof.savedAt = prev;
+    profileSavePending = true; return false;
+  }
+  try { if (cloudOn()) cloudSoon(); } catch(e) {}
+  return true;
+}
+function retryProfileSave() { if (profileSavePending) saveProf(); }
+document.addEventListener('visibilitychange', retryProfileSave);
+window.addEventListener('pagehide', retryProfileSave);
 function upgCost(u, lvl) { return lvl < 5 ? u.base*(lvl + 1) : Math.round(u.base*(lvl + 1)*1.5/100)*100; }
 // Taller: caballos, peso, tracción y puntos de rendimiento (PR) de cada auto. Todo sale de las mejoras que ya tenés.
 var REQ_LIM = null;   // en un evento con requisitos: { f: cuánto rinden las mejoras (0-1), hpMax: tope de caballos }
@@ -2842,6 +2874,12 @@ function genSqueal(ac) {
   return b;
 }
 
+// Performance 05: liberar las conexiones de cada efecto una vez terminado.
+function auReleaseOnEnd(source, ...nodes) {
+  source.addEventListener('ended', () => {
+    for (const node of [source, ...nodes]) { try { node.disconnect(); } catch(e) {} }
+  }, { once: true });
+}
 // Reproductor de motor: todas las capas en loop, se mezclan por RPM y carga
 function engPlayer(ac, out, onBufs, offBufs, withPan) {
   const pan = withPan && ac.createStereoPanner ? ac.createStereoPanner() : null;
@@ -2850,7 +2888,14 @@ function engPlayer(ac, out, onBufs, offBufs, withPan) {
   const mk = (buf) => { const s = ac.createBufferSource(); s.buffer = buf; s.loop = true; const g = ac.createGain(); g.gain.value = 0; s.connect(g); g.connect(bus); s.start(0, Math.random()*buf.duration); return { s, g }; };
   const on = onBufs.map(mk), off = offBufs ? offBufs.map(mk) : null;
   return {
-    stop() { try { for (const o of on.concat(off || [])) o.s.stop(); bus.disconnect(); } catch(e) {} },
+    stop() {
+      for (const o of on.concat(off || [])) {
+        try { o.s.stop(); } catch(e) {}
+        try { o.s.disconnect(); o.g.disconnect(); } catch(e) {}
+      }
+      try { bus.disconnect(); } catch(e) {}
+      if (pan) { try { pan.disconnect(); } catch(e) {} }
+    },
     set(rpm, load, vol, t, p) {
       rpm = Math.max(ENG_LAYERS[0], Math.min(ENG_LAYERS[ENG_LAYERS.length - 1]*1.08, rpm));
       let i = 0; while (i < ENG_LAYERS.length - 2 && rpm > ENG_LAYERS[i + 1]) i++;
@@ -2977,7 +3022,7 @@ function feelShift(up, model) {
     o.frequency.exponentialRampToValueAtTime(f*(up?0.65:1.65),t+0.095);
     g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.075,t+0.012);
     g.gain.exponentialRampToValueAtTime(0.0001,t+0.13);
-    o.connect(g); g.connect(AU.engBus); o.start(t); o.stop(t+0.15);
+    o.connect(g); g.connect(AU.engBus); o.start(t); o.stop(t+0.15); auReleaseOnEnd(o, g);
   } catch(e) {}
 }
 function audioUpdate(dt, held) {
@@ -3017,7 +3062,7 @@ function audioUpdate(dt, held) {
   if (ENG.popT > 0) { ENG.popT -= dt; ENG.popNext -= dt; if (ENG.popNext <= 0) { ENG.popNext = rand(0.07, 0.2); if (Math.random() < 0.5) { sfxPop(); p.popFx = 0.09; } } }
 
   let near = null, nd = 1e9;
-  for (const c of cars) { if (c.isPlayer) continue; const d = Math.hypot(c.wx - p.wx, c.wy - p.wy); if (d < nd) { nd = d; near = c; } }
+  if (racing) for (const c of cars) { if (c.isPlayer) continue; const d = Math.hypot(c.wx - p.wx, c.wy - p.wy); if (d < nd) { nd = d; near = c; } }
   if (near && racing && nd < 520) {
     let pan = 0;
     if (viewM) { const sx = (viewM.a*near.wx + viewM.c*near.wy + viewM.e)/DPR; pan = (sx - W/2)/(W/2); }
@@ -3060,10 +3105,10 @@ function sfxPop() {
     const s = ac.createBufferSource(); s.buffer = AU.white;
     const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = rand(700, 1800); bp.Q.value = 1.2;
     const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(rand(0.15, 0.35), t + 0.004); g.gain.exponentialRampToValueAtTime(0.0001, t + rand(0.04, 0.09));
-    s.connect(bp); bp.connect(g); g.connect(AU.master); s.start(t, Math.random()); s.stop(t + 0.12);
+    s.connect(bp); bp.connect(g); g.connect(AU.master); s.start(t, Math.random()); s.stop(t + 0.12); auReleaseOnEnd(s, bp, g);
     const o = ac.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(110, t); o.frequency.exponentialRampToValueAtTime(45, t + 0.08);
     const og = ac.createGain(); og.gain.setValueAtTime(0.25, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
-    o.connect(og); og.connect(AU.master); o.start(t); o.stop(t + 0.12);
+    o.connect(og); og.connect(AU.master); o.start(t); o.stop(t + 0.12); auReleaseOnEnd(o, og);
   } catch(e) {}
 }
 function sfxCrash(power) {
@@ -3073,17 +3118,17 @@ function sfxCrash(power) {
     // golpe grave
     const o = ac.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.25);
     const og = ac.createGain(); og.gain.setValueAtTime(0.6*k, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
-    o.connect(og); og.connect(AU.master); o.start(t); o.stop(t + 0.32);
+    o.connect(og); og.connect(AU.master); o.start(t); o.stop(t + 0.32); auReleaseOnEnd(o, og);
     // crujido de chapa
     const s = ac.createBufferSource(); s.buffer = AU.white;
     const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.7;
     const g = ac.createGain(); g.gain.setValueAtTime(0.5*k, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
-    s.connect(bp); bp.connect(g); g.connect(AU.master); s.start(t, Math.random()); s.stop(t + 0.4);
+    s.connect(bp); bp.connect(g); g.connect(AU.master); s.start(t, Math.random()); s.stop(t + 0.4); auReleaseOnEnd(s, bp, g);
     // chasquido metálico
     const s2 = ac.createBufferSource(); s2.buffer = AU.white;
     const bp2 = ac.createBiquadFilter(); bp2.type = 'bandpass'; bp2.frequency.value = rand(2600, 3800); bp2.Q.value = 7;
     const g2 = ac.createGain(); g2.gain.setValueAtTime(0.35*k, t); g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
-    s2.connect(bp2); bp2.connect(g2); g2.connect(AU.master); s2.start(t, Math.random()); s2.stop(t + 0.2);
+    s2.connect(bp2); bp2.connect(g2); g2.connect(AU.master); s2.start(t, Math.random()); s2.stop(t + 0.2); auReleaseOnEnd(s2, bp2, g2);
   } catch(e) {}
 }
 function sfxThunder() {
@@ -3093,11 +3138,11 @@ function sfxThunder() {
     const s = ac.createBufferSource(); s.buffer = AU.brown; s.loop = true;
     const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 160;
     const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.9, t + 0.12); g.gain.exponentialRampToValueAtTime(0.25, t + 0.9); g.gain.exponentialRampToValueAtTime(0.0001, t + 3.2);
-    s.connect(lp); lp.connect(g); g.connect(AU.master); s.start(t, Math.random()); s.stop(t + 3.3);
+    s.connect(lp); lp.connect(g); g.connect(AU.master); s.start(t, Math.random()); s.stop(t + 3.3); auReleaseOnEnd(s, lp, g);
     const c2 = ac.createBufferSource(); c2.buffer = AU.white;
     const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 0.6;
     const g2 = ac.createGain(); g2.gain.setValueAtTime(0.25, t); g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
-    c2.connect(bp); bp.connect(g2); g2.connect(AU.master); c2.start(t, Math.random()); c2.stop(t + 0.5);
+    c2.connect(bp); bp.connect(g2); g2.connect(AU.master); c2.start(t, Math.random()); c2.stop(t + 0.5); auReleaseOnEnd(c2, bp, g2);
   } catch(e) {}
 }
 function sfxSplash() {
@@ -3106,7 +3151,7 @@ function sfxSplash() {
     const ac = AU.ac, t = ac.currentTime, s = ac.createBufferSource(); s.buffer = AU.white;
     const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.setValueAtTime(700, t); bp.frequency.exponentialRampToValueAtTime(2200, t + 0.25); bp.Q.value = 0.8;
     const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
-    s.connect(bp); bp.connect(g); g.connect(AU.master); s.start(t, Math.random()); s.stop(t + 0.45);
+    s.connect(bp); bp.connect(g); g.connect(AU.master); s.start(t, Math.random()); s.stop(t + 0.45); auReleaseOnEnd(s, bp, g);
   } catch(e) {}
 }
 function sfxBoost(k) {
@@ -3117,10 +3162,10 @@ function sfxBoost(k) {
     const bp = ac.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.4;
     bp.frequency.setValueAtTime(300, t); bp.frequency.exponentialRampToValueAtTime(2600, t + 0.55);
     const g = ac.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.5*k, t + 0.05); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
-    s.connect(bp); bp.connect(g); g.connect(AU.master); s.start(t); s.stop(t + 1);
+    s.connect(bp); bp.connect(g); g.connect(AU.master); s.start(t); s.stop(t + 1); auReleaseOnEnd(s, bp, g);
     const o = ac.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(70, t); o.frequency.exponentialRampToValueAtTime(140, t + 0.4);
     const og = ac.createGain(); og.gain.setValueAtTime(0.35*k, t); og.gain.exponentialRampToValueAtTime(0.0001, t + 0.5);
-    o.connect(og); og.connect(AU.master); o.start(t); o.stop(t + 0.55);
+    o.connect(og); og.connect(AU.master); o.start(t); o.stop(t + 0.55); auReleaseOnEnd(o, og);
     for (let i = 0; i < 3; i++) setTimeout(sfxPop, 80 + i*110);
   } catch(e) {}
 }
@@ -3129,7 +3174,7 @@ function sfxBlip(freq, dur) {
   try {
     const ac = AU.ac, t = ac.currentTime, o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine'; o.frequency.value = freq;
     g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.12, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g); g.connect(AU.master); o.start(t); o.stop(t + dur + 0.02);
+    o.connect(g); g.connect(AU.master); o.start(t); o.stop(t + dur + 0.02); auReleaseOnEnd(o, g);
   } catch(e) {}
 }
 function dlSting(kind, chain=1) {
@@ -3168,6 +3213,20 @@ if (prof.dl2Layout !== 2) {
 try { rec.bestRace = +localStorage.getItem('driftloop2test_bestrace' + RSFX) || 0; rec.bestLap = +localStorage.getItem('driftloop2test_bestlap2' + RSFX) || 0; rec.wins = +localStorage.getItem('driftloop2test_wins') || 0; } catch(e) {}
 let newRaceRec = false, newLapRec = false;
 const popups = [], parts = [];
+// Reutilizar partículas sin cambiar su orden de dibujo ni su vida útil.
+const partPool = [];
+function recyclePart(p) { if (partPool.length < 521) partPool.push(p); }
+function clearParts() { for (const p of parts) recyclePart(p); parts.length = 0; }
+function tickParts(dt) {
+  let n = 0;
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i]; p.life -= dt;
+    if (p.life <= 0) { recyclePart(p); continue; }
+    p.x += p.vx*dt; p.y += p.vy*dt; p.vx *= 0.94; p.vy *= 0.94; if (p.grow) p.size += dt*14;
+    parts[n++] = p;
+  }
+  parts.length = n;
+}
 const CAR_L = 40, CAR_W = 21;
 // Colores de equipo inspirados en libreas clásicas
 const RIVAL_COLORS = [['#8fc3e3','#f47b20'],['#f1f1ec','#1d4f91'],['#14452f','#e6d3a3'],['#f2c200','#141414'],['#121316','#c9a227'],
@@ -3296,7 +3355,7 @@ function resetRace() {
   player = cars[pslot]; player.bonus = 0; player.earn = 0; player.st = newRaceStats(); player.st.startPos = pslot + 1;
   try { audioSetModel(prof.model); } catch(e) {}
   raceTime = 0; shownPos = 0; posPendT = 0; resultsReady = false; newRaceRec = false; newLapRec = false;
-  skN = 0; skHead = 0; parts.length = 0; popups.length = 0;
+  skN = 0; skHead = 0; clearParts(); popups.length = 0;
   for (const c of cars) placeCar(c);
   kickX = kickY = 0; hitStop = 0;
   p2 = null; if (duoMode) duoSetup();
@@ -3316,10 +3375,13 @@ let partSkip = 0;
 function part(x, y, vx, vy, life, size, col, grow) {
   if (grow && QUAL >= 2 && col !== 'mist' && (partSkip = (partSkip + 1) % (QUAL >= 3 ? 3 : 2)) !== 0) return;   // en calidad baja el humo es lo más pesado de dibujar: menos bocanadas
   const cap = LOCK30 ? 50 : QUAL >= 3 ? 70 : QUAL >= 2 ? 120 : MAXQ ? 520 : 360;
-  while (parts.length > cap) parts.shift();
-  parts.push({ x, y, vx, vy, life, max: life, size, col, grow, k: partN++ % 3 });
+  while (parts.length > cap) recyclePart(parts.shift());
+  const p = partPool.pop() || {};
+  p.x = x; p.y = y; p.vx = vx; p.vy = vy; p.life = life; p.max = life;
+  p.size = size; p.col = col; p.grow = grow; p.k = partN++ % 3;
+  parts.push(p);
 }
-function popup(txt, col, big) { popups.push({ txt, col, big: !!big, t: 0 }); if (popups.length > 4) popups.shift(); if (sayOK()) try { sayPopup(txt); } catch(e) {} }
+function popup(txt, col, big) { if (sayOK()) try { sayPopup(txt); } catch(e) {} }
 function nearCam(x, y, r) { return Math.abs(x - cam.x) < r && Math.abs(y - cam.y) < r; }
 
 function damageCar(c, power, wx, wy) {
@@ -3448,7 +3510,9 @@ addEventListener('pointerup', up); addEventListener('pointercancel', up);
 cv.addEventListener('lostpointercapture', up);
 cv.addEventListener('touchstart', e => e.preventDefault(), { passive: false });
 cv.addEventListener('contextmenu', e => e.preventDefault());
-addEventListener('blur', () => { pointers.clear(); revPointers.clear(); keyHeld = false; keyRev = false; if (typeof p2Pointers !== 'undefined') { p2Pointers.clear(); keyHeld2 = false; } });
+function clearBackgroundInput() { pointers.clear(); revPointers.clear(); keyHeld = false; keyRev = false; if (typeof p2Pointers !== 'undefined') { p2Pointers.clear(); keyHeld2 = false; } }
+addEventListener('blur', clearBackgroundInput);
+document.addEventListener('visibilitychange', () => { if (document.hidden) clearBackgroundInput(); });
 addEventListener('keydown', e => {
   if (garageOpen || (paused && e.code !== 'Escape' && e.code !== 'KeyP')) return;
   if (e.code === 'KeyG' && (state === 'menu' || (state === 'finish' && resultsReady))) { openGarage(); return; }
@@ -3628,7 +3692,7 @@ function stepCar(c, dt, throttle) {
   if (inP && !c.puddle && c.v > 140) { if (c.isPlayer) sfxSplash(); c.splashT = 0.35; }
   c.puddle = inP;
   const sf = surfAt(c.dist); c.surf = sf;
-  const G = C.agarreEnCurvas*c.gripMul*WX.grip*(GRIP_MOD || 1)*(inP ? 0.74 : 1)*(onGrass ? 0.5 : (sf.grip + (sf.loose ? (1 - sf.grip)*(c.loose || 0) : 0))*(sf.loose && !c.loose ? (c.low ? 0.58 : 0.8) : 1));   // en tierra sufren los autos de pista, y más los bajitos
+  const G = C.agarreEnCurvas*c.gripMul*WX.grip*(GRIP_MOD || 1)*trkGrip()*(inP ? 0.74 : 1)*(onGrass ? 0.5 : (sf.grip + (sf.loose ? (1 - sf.grip)*(c.loose || 0) : 0))*(sf.loose && !c.loose ? (c.low ? 0.58 : 0.8) : 1));   // en tierra sufren los autos de pista, y más los bajitos
   if (c.boostT > 0) c.boostT -= dt;
   if (c.stallT > 0) c.stallT -= dt;
   const boosting = c.boostT > 0;
@@ -3827,12 +3891,16 @@ function playerFinished() {
   player.xpGain = addXP(raceXP()*(eventMode ? 2 : 1));
   afterRace();
 }
-function save() { try { localStorage.setItem('driftloop2test_bestrace' + RSFX, rec.bestRace); localStorage.setItem('driftloop2test_bestlap2' + RSFX, rec.bestLap); localStorage.setItem('driftloop2test_wins', rec.wins); } catch(e) {} }
+function save() {
+  for (const [key, value] of [['driftloop2test_bestrace' + RSFX, rec.bestRace], ['driftloop2test_bestlap2' + RSFX, rec.bestLap], ['driftloop2test_wins', rec.wins]]) {
+    try { const raw = String(value); if (localStorage.getItem(key) !== raw) localStorage.setItem(key, raw); } catch(e) {}
+  }
+}
 
 /* IA: acelera a fondo salvo que no llegue a frenar para la curva que viene */
 function aiThrottle(c, sk) {
   const s = mod(c.dist), skill = sk || Math.max(0.72, Math.min(1.0, c.skillNow*(1 - 0.14*WX.wetK))),
-    grip = C.agarreEnCurvas*c.gripMul*WX.grip*(GRIP_MOD || 1)*skill*(1 - Math.max(0,c.v-400)/900),
+    grip = C.agarreEnCurvas*c.gripMul*WX.grip*(GRIP_MOD || 1)*trkGrip()*skill*(1 - Math.max(0,c.v-400)/900),
     v2 = c.v*c.v, dec = C.friccion*c.brakeMul*(1 - 0.15*WX.wetK)*0.72;
   for (let a = 20; a < 65 + c.v*1.65; a += 25) {
     const k = Math.abs(sample(s+a,tA).k); if (k < 1e-4) continue;
@@ -3939,17 +4007,20 @@ function updateDraft() {
 function collide(a, b) {
   if (a.airT > 0 || b.airT > 0) return;   // uno pasa volando por arriba del otro
   if (BRIDGE && carLevel(a) !== carLevel(b)) return;   // uno va por el puente y el otro por abajo
-  if (Math.abs(a.x - b.x) > 60 || Math.abs(a.y - b.y) > 60) return;
+  const reach = a.co + a.cr + b.co + b.cr;
+  if (Math.abs(a.x - b.x) > reach || Math.abs(a.y - b.y) > reach) return;
   const fa = [Math.cos(a.h), Math.sin(a.h)], fb = [Math.cos(b.h), Math.sin(b.h)];
   const rr_ = a.cr + b.cr;
   for (const ia of [a.co, -a.co]) for (const ib of [b.co, -b.co]) {
     const pax = a.x + fa[0]*ia, pay = a.y + fa[1]*ia, pbx = b.x + fb[0]*ib, pby = b.y + fb[1]*ib;
     let dx = pbx - pax, dy = pby - pay; const dist = Math.hypot(dx, dy);
-    if (dist >= rr_ || dist < 0.01) continue;
-    const nx = dx/dist, ny = dy/dist, pen = rr_ - dist;
+    if (dist >= rr_) continue;
+    // Si coinciden los centros, usar una normal estable para separarlos.
+    if (dist < 0.01) { dx = b.x-a.x; dy = b.y-a.y; if (Math.hypot(dx,dy)<0.01) { dx=fa[0]; dy=fa[1]; } }
+    const norm = Math.hypot(dx,dy), nx = dx/norm, ny = dy/norm, pen = rr_ - dist;
     const ma = a.mass || 1, mb = b.mass || 1, wa = mb/(ma + mb), wb = 1 - wa;   // el más pesado se mueve menos
     a.x -= nx*pen*wa; a.y -= ny*pen*wa; b.x += nx*pen*wb; b.y += ny*pen*wb;
-    const cx = pax + nx*a.cr, cy = pay + ny*a.cr;
+    const cx = pax + nx*(a.cr-pen*wa), cy = pay + ny*(a.cr-pen*wa);
     const rax = cx - a.x, ray = cy - a.y, rbx = cx - b.x, rby = cy - b.y;
     const vax = a.vx - a.r*ray, vay = a.vy + a.r*rax, vbx = b.vx - b.r*rby, vby = b.vy + b.r*rbx;
     const rvx = vbx - vax, rvy = vby - vay, vn = rvx*nx + rvy*ny;
@@ -3963,6 +4034,8 @@ function collide(a, b) {
       if (a.hitCd <= 0 || b.hitCd <= 0) { impact(-vn*1.4, cx, cy, a.isPlayer || b.isPlayer); damageCar(a, -vn*1.3*Math.min(1.5, mb/ma), cx, cy); damageCar(b, -vn*1.3*Math.min(1.5, ma/mb), cx, cy); a.hitCd = b.hitCd = 0.2; }
     }
     project(a); project(b);
+    // Sincronizar dibujo y velocímetro en el mismo paso que el impulso.
+    for (const c of [a,b]) { c.v = Math.hypot(c.vx,c.vy); syncView(c); if (c.wheels && pen > 6) c.wheels.fill(null); }
     return;
   }
 }
@@ -4086,9 +4159,8 @@ function update(dt) {
   const racing = state === 'race' || state === 'finish';
   if (racing) { raceTime += dt; updateDraft(); }
   const sub = 4, h = dt/sub;
-  for (let i = 0; i < sub; i++) {
+  if (racing) for (let i = 0; i < sub; i++) {
     for (const c of cars) {
-      if (!racing) continue;
       laneLogic(c, h);
       if (c.isPlayer && !duoMode) {
         c.stuckT = state === 'race' && held && raceTime > 2.5 && c.v < 22 && !(c.stallT > 0) && !(c.autoRev > 0) ? c.stuckT + h : 0;
@@ -4137,11 +4209,7 @@ function update(dt) {
   warn = state === 'race' && !aiThrottle(player, 1.3 - 0.2*WX.wetK);
   warnPulse += dt*10;
 
-  for (let i = parts.length - 1; i >= 0; i--) {
-    const p = parts[i]; p.life -= dt;
-    if (p.life <= 0) { parts.splice(i, 1); continue; }
-    p.x += p.vx*dt; p.y += p.vy*dt; p.vx *= 0.94; p.vy *= 0.94; if (p.grow) p.size += dt*14;
-  }
+  tickParts(dt);
   for (let i = popups.length - 1; i >= 0; i--) { popups[i].t += dt; if (popups[i].t > 1.3) popups.splice(i, 1); }
 
   updateCamera(dt);
@@ -4283,7 +4351,6 @@ function render() {
       ctx.fillStyle = '#ffffff'; ctx.fillRect(-21.4, -5, 1.4, 2.4); ctx.fillRect(-21.4, 2.6, 1.4, 2.4);
       ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.7; ctx.drawImage(puffGlowWarm, -30, -9, 18, 18); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
     }
-    if (c.draft && c.v > 200) { ctx.strokeStyle = 'rgba(255,255,255,.28)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(-26, -7); ctx.lineTo(-52, -7); ctx.moveTo(-26, 7); ctx.lineTo(-56, 7); ctx.stroke(); }
     ctx.restore();
   }
   if (!bridgeDone) drawBridge(R);
@@ -4348,16 +4415,24 @@ function drawNight(R) {
   const ls = QUAL >= 1 ? 0.2 : 0.25, w = Math.ceil(cv.width*ls), hh = Math.ceil(cv.height*ls);   // la oscuridad es suave: alcanza con un lienzo chico
   if (!lcv || lcv.width !== w || lcv.height !== hh) { lcv = mkCanvas(w, hh); lctx = lcv.getContext('2d'); }
   const L = lctx, m = viewM;
+  // Conservative transformed bounds, including filtering and the reduced light canvas.
+  const mx = Math.abs(m.a) + Math.abs(m.c), my = Math.abs(m.b) + Math.abs(m.d);
+  const lightPad = 4/ls + 4;
+  function lightVisible(x, y, r) {
+    const sx = m.a*x + m.c*y + m.e, sy = m.b*x + m.d*y + m.f;
+    const rx = mx*r + lightPad, ry = my*r + lightPad;
+    return !(sx + rx < 0 || sy + ry < 0 || sx - rx > cv.width || sy - ry > cv.height);
+  }
   L.setTransform(1, 0, 0, 1, 0, 0); L.globalCompositeOperation = 'copy'; L.globalAlpha = 1;
   L.fillStyle = WX.wet ? 'rgba(3,6,16,.88)' : 'rgba(5,9,26,.84)'; L.fillRect(0, 0, w, hh);
   L.globalCompositeOperation = 'destination-out'; L.imageSmoothingEnabled = true;
   L.setTransform(m.a*ls, m.b*ls, m.c*ls, m.d*ls, m.e*ls, m.f*ls);
-  for (const lp of lamps) { if (nearCam(lp.cx, lp.cy, R + 300)) L.drawImage(holeSpr, lp.cx - 280, lp.cy - 280, 560, 560); }
-  if (QUAL < 2) for (const a of decor.landmarks) if (a.kind !== 'mesa' && nearCam(a.x,a.y,R+80)) { L.globalAlpha=.38; L.drawImage(holeSpr,a.x-68,a.y-68,136,136); L.globalAlpha=1; }
-  for (const lv of lavas) { if (nearCam(lv.x, lv.y, R + 300)) { const r = lv.r*2.6; L.drawImage(holeSpr, lv.x - r, lv.y - r, r*2, r*2); L.globalAlpha = 0.5; L.drawImage(holeSpr, lv.x - r*0.6, lv.y - r*0.6, r*1.2, r*1.2); L.globalAlpha = 1; } }
+  for (const lp of lamps) { if (nearCam(lp.cx, lp.cy, R + 300) && lightVisible(lp.cx, lp.cy, 280)) L.drawImage(holeSpr, lp.cx - 280, lp.cy - 280, 560, 560); }
+  if (QUAL < 2) for (const a of decor.landmarks) if (a.kind !== 'mesa' && nearCam(a.x,a.y,R+80) && lightVisible(a.x,a.y,68)) { L.globalAlpha=.38; L.drawImage(holeSpr,a.x-68,a.y-68,136,136); L.globalAlpha=1; }
+  for (const lv of lavas) { if (nearCam(lv.x, lv.y, R + 300) && lightVisible(lv.x, lv.y, lv.r*2.6)) { const r = lv.r*2.6; L.drawImage(holeSpr, lv.x - r, lv.y - r, r*2, r*2); L.globalAlpha = 0.5; L.drawImage(holeSpr, lv.x - r*0.6, lv.y - r*0.6, r*1.2, r*1.2); L.globalAlpha = 1; } }
   const ch = 330*Math.sin(0.42);
   for (const c of cars) {
-    if (!nearCam(c.wx, c.wy, R + 340)) continue;
+    if (!nearCam(c.wx, c.wy, R + 340) || !lightVisible(c.wx, c.wy, 350 + Math.abs(c.co + c.cr))) continue;
     const fx = Math.cos(c.va), fy = Math.sin(c.va), half = c.co + c.cr;
     L.save(); L.translate(c.wx + fx*half, c.wy + fy*half); L.rotate(c.va); L.drawImage(coneSpr, 0, -ch, 330, ch*2); L.restore();
     if (c.isPlayer && prof.style.neon !== 'no') L.drawImage(holeSpr, c.wx - 70, c.wy - 70, 140, 140);
@@ -4368,18 +4443,18 @@ function drawNight(R) {
   // brillos aditivos: lámparas, faros y luces traseras
   ctx.setTransform(m); ctx.globalCompositeOperation = 'lighter';
   for (const lv of lavas) {
-    if (!nearCam(lv.x, lv.y, R + 300)) continue;
+    if (!nearCam(lv.x, lv.y, R + 300) || !lightVisible(lv.x, lv.y, lv.r*2.8)) continue;
     ctx.globalAlpha = 0.5 + 0.12*Math.sin(performance.now()*0.002 + lv.ph); ctx.drawImage(puffGlowWarm, lv.x - lv.r*2.2, lv.y - lv.r*2.2, lv.r*4.4, lv.r*4.4);
     ctx.globalAlpha = 0.35; ctx.drawImage(puffGlowRed, lv.x - lv.r*2.8, lv.y - lv.r*2.8, lv.r*5.6, lv.r*5.6);
   }
   for (const c of cars) if (c.isPlayer && nearCam(c.wx, c.wy, R)) drawNeon(c, true);
   ctx.setTransform(m); ctx.globalCompositeOperation = 'lighter';
   for (const lp of lamps) {
-    if (!nearCam(lp.hx, lp.hy, R + 300)) continue;
+    if (!nearCam(lp.hx, lp.hy, R + 300) || !lightVisible(lp.hx, lp.hy, 26)) continue;
     ctx.globalAlpha = 0.95; ctx.drawImage(puffGlowWarm, lp.hx - 26, lp.hy - 26, 52, 52);
   }
   for (const c of cars) {
-    if (!nearCam(c.wx, c.wy, R + 200)) continue;
+    if (!nearCam(c.wx, c.wy, R + 200) || !lightVisible(c.wx, c.wy, 260 + Math.abs(c.co + c.cr) + Math.abs(c.cr))) continue;
     const fx = Math.cos(c.va), fy = Math.sin(c.va), nx = -fy, ny = fx, half = c.co + c.cr, sd = c.cr - 3;
     ctx.globalAlpha = 0.9;
     for (const s of [-1, 1]) ctx.drawImage(puffGlowWarm, c.wx + fx*(half - 1) + nx*sd*s - 9, c.wy + fy*(half - 1) + ny*sd*s - 9, 18, 18);
@@ -4442,11 +4517,11 @@ function drawWeatherOverlay() {
     for (const d of rainDrops) {
       d.y += d.s*dt; d.x += d.s*dx*dt;
       if (d.y > H + 30 || d.x > W + 30) { d.y = -rand(0, 60); d.x = rand(-W*0.3, W); }
-      if (d.l < 23) { ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - dx*d.l, d.y - d.l); }
+      if (d.l < 23 && !(d.x < -2 || d.x - dx*d.l > W + 2 || d.y < -2 || d.y - d.l > H + 2)) { ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - dx*d.l, d.y - d.l); }
     }
     ctx.lineWidth = .8; ctx.strokeStyle = WX.night ? 'rgba(165,190,225,.24)' : 'rgba(220,235,250,.27)'; ctx.stroke();
     ctx.beginPath();
-    for (const d of rainDrops) if (d.l >= 23) {ctx.moveTo(d.x,d.y);ctx.lineTo(d.x-dx*d.l,d.y-d.l);}
+    for (const d of rainDrops) if (d.l >= 23 && !(d.x < -2 || d.x - dx*d.l > W + 2 || d.y < -2 || d.y - d.l > H + 2)) {ctx.moveTo(d.x,d.y);ctx.lineTo(d.x-dx*d.l,d.y-d.l);}
     ctx.lineWidth = 1.35; ctx.strokeStyle = WX.night ? 'rgba(190,215,245,.38)' : 'rgba(235,245,255,.43)';ctx.stroke();
     }
   }
@@ -4458,7 +4533,22 @@ function bodyOff(c) {   // pseudo 3D: la carrocería se corre sobre la suspensi�
 }
 function drawParts(low) {
   const SM = smokeSet();
+  // Conservative world-space bounds of the actual viewport, including camera rotation and shake.
+  const m = ctx.getTransform(), det = m.a*m.d - m.b*m.c;
+  const valid = Number.isFinite(det) && Math.abs(det) > 1e-12;
+  let left = -Infinity, right = Infinity, top = -Infinity, bottom = Infinity;
+  if (valid) {
+    const x0 = (m.c*m.f - m.d*m.e)/det, y0 = (m.b*m.e - m.a*m.f)/det;
+    const xx = m.d*ctx.canvas.width/det, xy = -m.b*ctx.canvas.width/det;
+    const yx = -m.c*ctx.canvas.height/det, yy = m.a*ctx.canvas.height/det;
+    left = x0 + Math.min(0, xx) + Math.min(0, yx) - 4;
+    right = x0 + Math.max(0, xx) + Math.max(0, yx) + 4;
+    top = y0 + Math.min(0, xy) + Math.min(0, yy) - 4;
+    bottom = y0 + Math.max(0, xy) + Math.max(0, yy) + 4;
+  }
   for (const p of parts) {
+    const pad = Math.max(Math.abs(p.size)*2.5, Math.abs(p.vx)*0.03, Math.abs(p.vy)*0.03) + 2;
+    if (p.x + pad < left || p.x - pad > right || p.y + pad < top || p.y - pad > bottom) continue;
     const a = p.life/p.max;
     if (p.col === 'mist') {
       if (!low) continue;
@@ -4565,7 +4655,7 @@ function drawFX() {
     const cx = W/2, cy = H*0.62, D = Math.hypot(W, H)*0.5;
     const g = ctx.createRadialGradient(cx, cy, D*0.3, cx, cy, D*1.1); g.addColorStop(0, 'rgba(255,140,40,0)'); g.addColorStop(1, 'rgba(255,120,30,.22)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
-  if (warn && SET.warn) {
+  if (false && warn && SET.warn) {
     const a = 0.22 + 0.14*Math.sin(warnPulse);
     const g = ctx.createRadialGradient(W/2, H/2, Math.min(W, H)*0.35, W/2, H/2, Math.max(W, H)*0.75);
     g.addColorStop(0, 'rgba(255,0,0,0)'); g.addColorStop(1, `rgba(255,20,20,${a.toFixed(3)})`);
@@ -4700,8 +4790,8 @@ function drawRaceHUD() {
     if (behind && !behind.finished) chip(W/2 + 38, 66, '▼ ' + Math.max(0, wrapDiff(player.dist - behind.dist)/Math.max(220, behind.v)).toFixed(2), '#3dff8a');
   }
   let cy0 = 92;
-  if (player.surf && player.surf !== SURF.asfalto && (state === 'race' || state === 'finish')) { const ch = SURF_STYLE[SURF_LIST.indexOf(player.surf)].chip; chip(W/2, cy0, player.surf.name, ch[0], ch[1]); cy0 += 24; }
-  if (player.draft && state === 'race' && player.v > 200) chip(W/2, cy0, 'REBUFO', '#7fe0ff', 'rgba(10,60,90,.9)');
+  if (false && player.surf && player.surf !== SURF.asfalto && (state === 'race' || state === 'finish')) { const ch = SURF_STYLE[SURF_LIST.indexOf(player.surf)].chip; chip(W/2, cy0, player.surf.name, ch[0], ch[1]); cy0 += 24; }
+  if (false && player.draft && state === 'race' && player.v > 200) chip(W/2, cy0, 'REBUFO', '#7fe0ff', 'rgba(10,60,90,.9)');
   if (elimMode) drawElimHUD();
   // Vuelta
   const lapNow = Math.min(LAPS, Math.max(1, player.lapsDone + 1));
@@ -4767,19 +4857,22 @@ function drawRaceHUD() {
 }
 /* ---------- carteles grandes (última vuelta, meta) y confeti ---------- */
 const banners = [], confetti = [];
-function banner(t, sub, col, checker) { banners.push({ t, sub, col, checker: !!checker, a: 0 }); if (sayOK()) try { sayBanner(t, sub); } catch(e) {} }
+function banner(t, sub, col, checker) {
+  if (t === 'ÚLTIMA VUELTA') { banners.length = 0; banners.push({ t, sub: '', col: '#d71920', checker: true, a: 0 }); }
+  if (sayOK()) try { sayBanner(t, sub); } catch(e) {}
+}
 function drawBanners() {
   const dt = Math.min(0.05, lastDt || 0.016);
   for (let i = banners.length - 1; i >= 0; i--) {
-    const b = banners[i]; b.a += dt; if (b.a > 2.2) { banners.splice(i, 1); continue; }
-    const inT = Math.min(1, b.a/0.22), outT = Math.max(0, (b.a - 1.8)/0.4), ease = t => 1 - Math.pow(1 - t, 3);
-    const x = -W*(1 - ease(inT)) + W*ease(outT), y = 124, hb = 56;
+    const b = banners[i]; b.a += dt; if (b.a > 2.8) { banners.splice(i, 1); continue; }
+    const inT = Math.min(1, b.a/0.20), outT = Math.max(0, (b.a - 2.4)/0.4), ease = t => 1 - Math.pow(1 - t, 3);
+    const x = -W*(1 - ease(inT)) + W*ease(outT), y = 124, hb = 66;
     ctx.save(); ctx.translate(x, 0);
     const g = ctx.createLinearGradient(0, y, W, y); g.addColorStop(0, b.col); g.addColorStop(1, 'rgba(10,10,14,.92)');
     para(-20, y, W + 40, hb, 14, g);
     if (b.checker) { for (let cxx = 0; cxx < W; cxx += 12) for (let r = 0; r < 2; r++) { ctx.fillStyle = ((cxx/12 + r) & 1) ? '#111' : '#fff'; ctx.fillRect(cxx, y - 12 + r*6 - 6, 12, 6); ctx.fillRect(cxx, y + hb + r*6, 12, 6); } }
     else { ctx.fillStyle = '#fff'; ctx.fillRect(0, y - 3, W, 3); ctx.fillRect(0, y + hb, W, 3); }
-    txt(b.t, W/2, y + 34, 32, '#fff', 'center', true, 'italic 800');
+    txt(b.t, W/2, y + 46, Math.min(44, W*0.105), '#fff', 'center', true, 'italic 800');
     if (b.sub) txt(b.sub, W/2, y + 50, 12, '#ffe9a0', 'center', true, '700');
     ctx.restore();
   }
@@ -4809,7 +4902,7 @@ function drawHUD() {
     if (state === 'race') {
       const rb = revBtn(), on = isRev();
       const stuck = !on && player.v < 25 && raceTime > 2 && (Math.abs(angDiff(sample(mod(player.dist), tA).ang, player.h)) > 0.9 || Math.abs(player.d) > WALL - 35);
-      if (stuck) { ctx.strokeStyle = `rgba(255,210,63,${(0.5 + 0.5*Math.sin(animT*8)).toFixed(2)})`; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(rb.x, rb.y, rb.r + 6, 0, 7); ctx.stroke();
+      if (false && stuck) { ctx.strokeStyle = `rgba(255,210,63,${(0.5 + 0.5*Math.sin(animT*8)).toFixed(2)})`; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(rb.x, rb.y, rb.r + 6, 0, 7); ctx.stroke();
         txt('◀ MANTENÉ R', rb.x + rb.r + 10, rb.y - 2, 15, '#ffd23f', 'left', true, 'italic 800'); txt('MARCHA ATRÁS', rb.x + rb.r + 10, rb.y + 14, 12, '#ffd23f', 'left', true, '700'); }
       { const g = ctx.createRadialGradient(rb.x, rb.y - 10, 4, rb.x, rb.y, rb.r); g.addColorStop(0, on ? '#ff4a3a' : 'rgba(44,49,60,.92)'); g.addColorStop(1, on ? '#a3120b' : 'rgba(6,8,12,.92)');
         ctx.fillStyle = g; ctx.beginPath(); ctx.arc(rb.x, rb.y, rb.r, 0, 7); ctx.fill(); }
@@ -4822,9 +4915,9 @@ function drawHUD() {
 
     // avisos abajo al centro (entre el botón R y el cuentavueltas), lejos de la pista
     const bxC = (90 + W - 152)/2, byC = H - 52;
-    if (warn && SET.warn && isHeld()) { const on = Math.sin(warnPulse) > 0; para(bxC - 56, byC - 22, 112, 36, 7, on ? 'rgba(225,37,27,.95)' : 'rgba(8,10,14,.9)'); txt('¡SOLTÁ!', bxC, byC + 5, 25, on ? '#fff' : '#ff3b2a', 'center', false, 'italic 800'); }
-    else if (warn && SET.warn) { para(bxC - 46, byC - 16, 92, 26, 6, 'rgba(8,10,14,.85)'); txt('▼ CURVA', bxC, byC + 3, 15, '#ffb3a8', 'center', false, 'italic 800'); }
-    else if (state === 'race' && stateT > 1 && stateT < 6 && player.v < 40) { txt('MANTENÉ APRETADO', bxC, byC - 4, 15, '#fff', 'center', true, 'italic 800'); txt('PARA ACELERAR', bxC, byC + 12, 12, '#c9d1d9', 'center', true, '700'); }
+    if (false && warn && SET.warn && isHeld()) { const on = Math.sin(warnPulse) > 0; para(bxC - 56, byC - 22, 112, 36, 7, on ? 'rgba(225,37,27,.95)' : 'rgba(8,10,14,.9)'); txt('¡SOLTÁ!', bxC, byC + 5, 25, on ? '#fff' : '#ff3b2a', 'center', false, 'italic 800'); }
+    else if (false && warn && SET.warn) { para(bxC - 46, byC - 16, 92, 26, 6, 'rgba(8,10,14,.85)'); txt('▼ CURVA', bxC, byC + 3, 15, '#ffb3a8', 'center', false, 'italic 800'); }
+    else if (false && state === 'race' && stateT > 1 && stateT < 6 && player.v < 40) { txt('MANTENÉ APRETADO', bxC, byC - 4, 15, '#fff', 'center', true, 'italic 800'); txt('PARA ACELERAR', bxC, byC + 12, 12, '#c9d1d9', 'center', true, '700'); }
     drawLights();
   }
 
@@ -5010,7 +5103,7 @@ const gEl = document.createElement('div'); gEl.id = 'garage';
   gEl.querySelector('#gGo').onclick = () => closeGarage(true);
   gEl.querySelector('#gView').onclick = () => openShowroom();
   gEl.querySelector('#gAct').onclick = () => gAction();
-  gEl.querySelector('#srX').onclick = () => { srOpen = false; gEl.querySelector('#showroom').style.display = 'none'; };
+  gEl.querySelector('#srX').onclick = () => { srOpen = false; gEl.querySelector('#showroom').style.display = 'none'; syncGarageRAF(); };
   const src = gEl.querySelector('#srCv');
   src.addEventListener('pointerdown', e => { srDrag = { x: e.clientX, a: srAng, t: performance.now() }; srVel = 0; try { src.setPointerCapture(e.pointerId); } catch(_) {} });
   src.addEventListener('pointermove', e => { if (!srDrag) return; const na = srDrag.a + (e.clientX - srDrag.x)*0.012; const now = performance.now(); srVel = (na - srAng)/Math.max(0.008, (now - srDrag.t)/1000); srDrag.t = now; srAng = na; });
@@ -5023,10 +5116,10 @@ function openGarage() {
   initAudio();
   garageOpen = true; gView = prof.model; pointers.clear(); revPointers.clear();
   gEl.style.left = Math.round((innerWidth - W)/2) + 'px'; gEl.style.width = W + 'px'; gEl.style.display = 'flex';
-  gRender(); requestAnimationFrame(gPreviewLoop);
+  gRender(); syncGarageRAF();
 }
 function closeGarage(race) {
-  garageOpen = false; srOpen = false; gEl.style.display = 'none'; gEl.querySelector('#showroom').style.display = 'none';
+  garageOpen = false; srOpen = false; gEl.style.display = 'none'; gEl.querySelector('#showroom').style.display = 'none'; syncGarageRAF();
   saveProf(); endChampRace(); resetRace();
   toast(checkAwards(null).concat(troSum(troCheck())));
   if (race) startCountdown(); else { state = 'menu'; stateT = 0; }
@@ -5058,12 +5151,23 @@ function openShowroom() {
   srOpen = true; srAng = -Math.PI/2; srVel = 0.35;
   gEl.querySelector('#showroom').style.display = 'block';
   gEl.querySelector('#srName').textContent = MODELS[gView].name;
-  requestAnimationFrame(srLoop);
+  syncGarageRAF();
 }
 let srLast = 0, srPat = null;
+// One animation callback at most, only for the visible garage canvas.
+let garageRAF = null, garageRAFMode = '';
+function syncGarageRAF() {
+  const mode = garageOpen && !document.hidden ? (srOpen ? 'showroom' : 'preview') : '';
+  if (garageRAF !== null && mode !== garageRAFMode) { cancelAnimationFrame(garageRAF); garageRAF = null; }
+  if (!mode || garageRAF !== null) return;
+  if (mode !== garageRAFMode) { if (mode === 'showroom') srLast = 0; else previewLast = -Infinity; }
+  garageRAFMode = mode;
+  garageRAF = requestAnimationFrame(now => { garageRAF = null; if (garageOpen && !document.hidden && mode === (srOpen ? 'showroom' : 'preview')) { try { if (mode === 'showroom') srLoop(now); else gPreviewLoop(now); } finally { syncGarageRAF(); } } else syncGarageRAF(); });
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) { srLast = 0; previewLast = -Infinity; } syncGarageRAF(); });
 function srLoop(now) {
   if (!srOpen || !garageOpen) return;
-  if (document.hidden || now - srLast < 16) { requestAnimationFrame(srLoop); return; }
+  if (document.hidden || now - srLast < 16) return;
   const dt = Math.min(0.05, (now - (srLast || now))/1000); srLast = now;
   if (!srDrag) { srAng += srVel*dt; if (Math.abs(srVel) > 0.35) srVel *= Math.exp(-1.5*dt); }
   const cvs = gEl.querySelector('#srCv'), dpr = Math.min(1.5, devicePixelRatio || 1), w = cvs.clientWidth, h = cvs.clientHeight;
@@ -5081,7 +5185,6 @@ function srLoop(now) {
   const k = (R0*1.7)/60;
   g.save(); g.translate(cx + 8, cy + 11); g.rotate(srAng); g.globalAlpha = 0.85; g.drawImage(carShadowFor(gView), -30*k, -18*k, 60*k, 36*k); g.restore();
   g.save(); g.translate(cx, cy); g.rotate(srAng); g.drawImage(gSpr, -30*k, -18*k, 60*k, 36*k); g.restore();
-  requestAnimationFrame(srLoop);
 }
 function el(tag, cls, html) { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; return e; }
 
@@ -5194,7 +5297,7 @@ let gPat = null;
 let previewLast = -Infinity;
 function gPreviewLoop(now) {
   if (!garageOpen) return;
-  if (srOpen || document.hidden || now - previewLast < 32) { requestAnimationFrame(gPreviewLoop); return; } previewLast = now;
+  if (srOpen || document.hidden || now - previewLast < 32) return; previewLast = now;
   const cvp = gEl.querySelector('#gPrev'), dpr = Math.min(1.5, devicePixelRatio || 1);
   const w = cvp.clientWidth, h = cvp.clientHeight;
   if (cvp.width !== Math.round(w*dpr) || cvp.height !== Math.round(h*dpr)) { cvp.width = Math.round(w*dpr); cvp.height = Math.round(h*dpr); gPat = null; }
@@ -5217,7 +5320,6 @@ function gPreviewLoop(now) {
   if (prof.style.neon !== 'no') { g.save(); g.translate(w/2, h/2); g.rotate(ang); g.globalCompositeOperation = 'lighter'; g.globalAlpha = 0.9; g.drawImage(tintPuff(prof.style.neon), -42*k, -27*k, 84*k, 54*k); g.restore(); }
   g.save(); g.translate(w/2 + 6, h/2 + 8); g.rotate(ang); g.globalAlpha = 0.85; g.drawImage(carShadowFor(gView), -30*k, -18*k, 60*k, 36*k); g.restore();
   g.save(); g.translate(w/2, h/2); g.rotate(ang); g.drawImage(gSpr, -30*k, -18*k, 60*k, 36*k); g.restore();
-  requestAnimationFrame(gPreviewLoop);
 }
 
 /* =====================================================================
@@ -5539,7 +5641,7 @@ addEventListener('resize', () => { if (menuShown) { mEl.style.left = Math.round(
 const _closeGarage = closeGarage; closeGarage = function (race) { _closeGarage(race); if (!race) { menuShown = false; } };
 const _closePause = closePause; closePause = function () { _closePause(); if (state === 'menu' && menuShown) mRender(false); };
 
-let heroSpr = null, heroKey = '';
+let heroSpr = null, heroKey = '', heroGlow = null, heroGlowCtx = null, heroGlowRadius = -1, heroGlowLayout = "";
 let heroLast = -Infinity;
 function heroLoop(now) {
   if (!menuShown || paused || now - heroLast < 32) return; heroLast = now;
@@ -5547,14 +5649,18 @@ function heroLoop(now) {
   if (cvh) {
     const dpr = Math.min(1.25, devicePixelRatio || 1), w = cvh.clientWidth, h = cvh.clientHeight;
     if (w > 0 && h > 0) {
-      if (cvh.width !== Math.round(w*dpr) || cvh.height !== Math.round(h*dpr)) { cvh.width = Math.round(w*dpr); cvh.height = Math.round(h*dpr); }
+      if (cvh.width !== Math.round(w*dpr) || cvh.height !== Math.round(h*dpr)) { cvh.width = Math.round(w*dpr); cvh.height = Math.round(h*dpr); heroGlow = null; }
       const g = cvh.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
       const cx = w/2, cy = h*0.48, k = Math.min(h/44, w/84), t = now/1000;
       // plataforma con luz
       const pr = Math.min(w*0.42, h*0.5);
       g.save(); g.translate(cx, cy + 4); g.scale(1, 0.42);
-      const pl = g.createRadialGradient(0, 0, pr*0.1, 0, 0, pr); pl.addColorStop(0, 'rgba(255,60,40,.35)'); pl.addColorStop(0.6, 'rgba(225,37,27,.12)'); pl.addColorStop(1, 'rgba(225,37,27,0)');
-      g.fillStyle = pl; g.beginPath(); g.arc(0, 0, pr, 0, 7); g.fill();
+      const glowLayout = w + "|" + h + "|" + dpr;
+      if (heroGlowCtx !== g || heroGlowRadius !== pr || heroGlowLayout !== glowLayout || !heroGlow) {
+        const pl = g.createRadialGradient(0, 0, pr*0.1, 0, 0, pr); pl.addColorStop(0, 'rgba(255,60,40,.35)'); pl.addColorStop(0.6, 'rgba(225,37,27,.12)'); pl.addColorStop(1, 'rgba(225,37,27,0)');
+        heroGlow = pl; heroGlowCtx = g; heroGlowRadius = pr; heroGlowLayout = glowLayout;
+      }
+      g.fillStyle = heroGlow; g.beginPath(); g.arc(0, 0, pr, 0, 7); g.fill();
       g.strokeStyle = 'rgba(255,90,70,.55)'; g.lineWidth = 2.5; g.beginPath(); g.arc(0, 0, pr*0.78, t*0.8, t*0.8 + 4.2); g.stroke();
       g.strokeStyle = 'rgba(255,255,255,.18)'; g.lineWidth = 1.5; g.beginPath(); g.arc(0, 0, pr*0.92, -t*0.5, -t*0.5 + 2.5); g.stroke();
       g.restore();
@@ -5909,9 +6015,17 @@ function resetChampRace() {
     cars.push(c);
   });
   player = cars.find(c => c.isPlayer); player.bonus = 0; player.earn = 0;
+  { // el jefe de la final es el mejor de la carrera: mejor auto, mejor manejo y casi sin errores
+    const b = bossActive(), bc = b && cars.find(c => !c.isPlayer && c.name === b.name), others = cars.filter(c => !c.isPlayer && c !== bc);
+    if (bc && others.length) {
+      const mx = k => Math.max(...others.map(c => c[k]));
+      bc.vmaxMul = Math.max(bc.vmaxMul, mx('vmaxMul')*1.04); bc.accMul = Math.max(bc.accMul, mx('accMul')*1.04); bc.gripMul = Math.max(bc.gripMul, mx('gripMul')*1.03);
+      bc.skill = bc.skillNow = Math.min(1.55, Math.max(bc.skill, mx('skill') + 0.06)); bc.mistakeP = Math.min(bc.mistakeP, Math.min(...others.map(c => c.mistakeP))*0.5);
+    }
+  }
   try { audioSetModel(prof.model); } catch(e) {}
   raceTime = 0; shownPos = 0; posPendT = 0; resultsReady = false; newRaceRec = false; newLapRec = false;
-  skN = 0; skHead = 0; parts.length = 0; popups.length = 0;
+  skN = 0; skHead = 0; clearParts(); popups.length = 0;
   for (const c of cars) placeCar(c);
   cam.x = player.wx; cam.y = player.wy; cam.ang = sample(0, tA).ang;
   fixRivalColors();
@@ -6017,7 +6131,7 @@ function checkAwards(s) {
   if (got.length) saveProf();
   return got;
 }
-function toast(list) {
+function toast(list) { return;
   for (const g of list) {
     const el = document.createElement('div'); el.className = 'toast';
     el.innerHTML = `<b>${g.head || g.ico + ' ' + g.kind + ' COMPLETADO'}</b><span>${g.txt}</span><i>+${fmtMoney(g.pay)}</i>`;
@@ -6604,7 +6718,7 @@ function drawTTHUD() {
   if (state === 'race' && ghost && ttDeltaShow !== null && player.lapsDone >= 0) {
     const v = ttDeltaShow, ahead = v < 0;
     chip(W/2, 66, (ahead ? '−' : '+') + Math.abs(v).toFixed(2), ahead ? '#3dff8a' : '#ff8a7a', ahead ? 'rgba(10,70,35,.9)' : 'rgba(90,20,20,.9)');
-  } else if (state === 'race' && !ghost) chip(W/2, 66, 'GRABANDO TU FANTASMA', '#8fe3ff', 'rgba(10,50,70,.9)');
+  } else if (false && state === 'race' && !ghost) chip(W/2, 66, 'GRABANDO TU FANTASMA', '#8fe3ff', 'rgba(10,50,70,.9)');
   // tiempos de medalla a la izquierda
   const y0 = 124; for (let i = 0; i < 3; i++) { const ok = have > i;
     para(12, y0 + i*21, 96, 19, 4, ok ? 'rgba(255,210,63,.22)' : 'rgba(8,10,14,.75)');
@@ -7238,7 +7352,7 @@ function drawElimHUD() {
   if (state === 'race' && leader) {
     const rem = Math.max(0, (TR.L - mod(leader.dist))/Math.max(150, leader.v)), danger = player.pos === cars.length;
     if (leader.lapsDone >= 0) chip(W/2, 66, '☠ ELIMINACIÓN EN ' + rem.toFixed(1) + 's', danger ? '#fff' : '#ffb3a8', danger ? 'rgba(170,15,15,.95)' : 'rgba(60,10,10,.85)');
-    if (danger && raceTime > 2) {
+    if (false && danger && raceTime > 2) {
       const a = 0.55 + 0.45*Math.sin(animT*9);
       ctx.save(); ctx.globalAlpha = a; txt('⚠ ¡ESTÁS ÚLTIMO!', W/2, H*0.30, 26, '#ff5a4a', 'center', true, 'italic 800'); ctx.restore();
     }
@@ -7327,7 +7441,7 @@ function drawDuoHUD() {
     para(12, H - 58, 150, 44, 8, 'rgba(8,10,14,.82)'); para(12, H - 58, 6, 44, 3, col);
     txt(who ? 'J2' : 'J1', 26, H - 28, 24, col, 'left', false, 'italic 800');
     for (let i = 0; i < DUO_WIN; i++) { ctx.fillStyle = i < sc ? col : 'rgba(255,255,255,.18)'; ctx.beginPath(); ctx.arc(70 + i*19, H - 36, 7, 0, 7); ctx.fill(); }
-    if (state === 'race' && w && SET.warn) { const on = Math.sin(warnPulse) > 0; para(W/2 - 50, H - 58, 100, 34, 7, on ? 'rgba(225,37,27,.95)' : 'rgba(8,10,14,.9)'); txt('¡SOLTÁ!', W/2, H - 34, 22, '#fff', 'center', false, 'italic 800'); }
+    if (false && state === 'race' && w && SET.warn) { const on = Math.sin(warnPulse) > 0; para(W/2 - 50, H - 58, 100, 34, 7, on ? 'rgba(225,37,27,.95)' : 'rgba(8,10,14,.9)'); txt('¡SOLTÁ!', W/2, H - 34, 22, '#fff', 'center', false, 'italic 800'); }
     if (state === 'countdown') {
       txt(who ? 'J2 · TOCÁ TU MITAD' : 'J1 · TOCÁ TU MITAD', W/2, H - 130, 20, col, 'center', true, 'italic 800');
       txt('mantené para acelerar', W/2, H - 108, 14, '#fff', 'center', true, '700');
@@ -7382,7 +7496,7 @@ function startReplay(withClip) {
   if (fin < b[0].t || fin > last + 0.5) fin = Math.max(b[0].t, last - 1.6);      // por si el tiempo de llegada no coincide con lo grabado
   let t1 = Math.min(last, fin + 1.4), t0 = Math.max(b[0].t, t1 - 8.5);
   if (t1 - t0 < 3) { t1 = last; t0 = Math.max(b[0].t, t1 - 8.5); }
-  replayOn = true; tcAdd('replay'); hideRes(); parts.length = 0; popups.length = 0; banners.length = 0;
+  replayOn = true; tcAdd('replay'); hideRes(); clearParts(); popups.length = 0; banners.length = 0;
   RP.rp = { t0, t1, t: t0, fin, shot: -1, shotT: 0, fix: null, end: false, at: performance.now() };
   rpNextShot();
   if (withClip) rpStartClip();
@@ -7430,7 +7544,7 @@ function replayTick(dt) {
   if (r.t >= r.t1) { r.hold = (r.hold || 0) + Math.min(0.05, lastDt || 0.016); if (r.hold > 1.7 && !r.end) { r.end = true; endReplay(); } return; }   // placa final
   if (r.shotT > (r.shot === 1 ? 2.2 : 2.8) && Math.abs(r.t - r.fin) > 0.9) rpNextShot();
   rpApply(r.t);
-  for (let i = parts.length - 1; i >= 0; i--) { const p = parts[i]; p.life -= dt; if (p.life <= 0) { parts.splice(i, 1); continue; } p.x += p.vx*dt; p.y += p.vy*dt; p.vx *= 0.94; p.vy *= 0.94; if (p.grow) p.size += dt*14; }
+  tickParts(dt);
   // cámaras
   const base = W/430; cam.ax = 0.5; cam.ay = 0.55; cam.ao = 0; cam.zm = 1;
   if (r.shot === 0) { cam.x = player.wx; cam.y = player.wy; cam.ang += angDiff(player.va, cam.ang)*Math.min(1, dt*4); cam.zoom = base*1.25; }
@@ -8141,7 +8255,7 @@ function musicTick() {
   if (!want) return;
   const src = ac.createBufferSource(); src.buffer = MUS.bufs[want]; src.loop = true;
   const g = ac.createGain(); g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(1, now + 1.2);
-  src.connect(g); g.connect(MUS.bus); src.start(now + 0.02);
+  src.connect(g); g.connect(MUS.bus); auReleaseOnEnd(src, g); src.start(now + 0.02);
   MUS.cur = { src, g };
 }
 // ---- locutor ----
@@ -8388,13 +8502,23 @@ function cloudApply(raw) {
 async function cloudPush() {
   if (!cloudOn() || CLOUD.busy) return;
   CLOUD.busy = true;
+  let uploaded = false, localAt = 0;
+  const uid = fbAuth.uid;
   try {
     await fbToken();
+    if (!cloudOn() || fbAuth.uid !== uid) return;
+    if (profileSavePending && !saveProf()) throw new Error('local save pending');
     const at = Date.now();
-    await fsReq('PATCH', `/saves/${fbAuth.uid}`, fsEnc({ data: cloudPayload(), at, lvl: prof.lvl || 1, money: Math.round(prof.money || 0), dev: NATIVE ? 'app' : 'web' }));
-    CLOUD.sync = { at, localAt: prof.savedAt || at }; cloudSyncSave(); CLOUD.last = at; CLOUD.err = '';
+    const data = cloudPayload();
+    localAt = prof.savedAt || 0;
+    await fsReq('PATCH', `/saves/${uid}`, fsEnc({ data, at, lvl: prof.lvl || 1, money: Math.round(prof.money || 0), dev: NATIVE ? 'app' : 'web' }));
+    if (!cloudOn() || fbAuth.uid !== uid) return;
+    CLOUD.sync = { at, localAt }; cloudSyncSave(); CLOUD.last = at; CLOUD.err = ''; uploaded = true;
   } catch(e) { CLOUD.err = 'No se pudo guardar en la nube'; }
-  CLOUD.busy = false;
+  finally {
+    CLOUD.busy = false;
+    if (uploaded && cloudOn() && fbAuth.uid === uid && ((prof.savedAt || 0) > localAt || profileSavePending)) cloudSoon(2000);
+  }
 }
 function cloudSoon(ms) { if (!cloudOn()) return; clearTimeout(CLOUD.timer); CLOUD.timer = setTimeout(cloudPush, ms === undefined ? 15000 : ms); }
 // al iniciar sesión o abrir el juego: ¿hay una partida más nueva en la nube?
@@ -8556,7 +8680,7 @@ setInterval(() => {
     else if (!want && wakeLock) { wakeLock.release(); wakeLock = null; }
   } catch(e) {}
 }, 1500);
-document.addEventListener('visibilitychange', () => { try { if (!AU.ok) return; if (document.hidden) AU.ac.suspend(); else if (!ADS.busy) AU.ac.resume(); } catch(e) {} });
+document.addEventListener('visibilitychange', () => { try { if (!AU.ok) return; if (document.hidden) AU.ac.suspend(); else if (!ADS.busy && (!paused || pauseFromMenu)) AU.ac.resume(); } catch(e) {} });
 
 /* =====================================================================
    INTRO: pantalla "tocá para arrancar" + presentación en vivo con el motor del juego
@@ -8648,7 +8772,7 @@ function introPlayMusic() {
     buf.getChannelData(0).set(introSong.L); buf.getChannelData(1).set(introSong.R);
     const src = ac.createBufferSource(); src.buffer = buf;
     const g = ac.createGain(); g.gain.value = 0.85; src.connect(g); g.connect(AU.out);
-    const t0 = ac.currentTime + 0.05; src.start(t0);
+    const t0 = ac.currentTime + 0.05; auReleaseOnEnd(src, g); src.start(t0);
     return { src, g, t0 };
   } catch(e) { return null; }
 }
@@ -8804,14 +8928,25 @@ function showErr() {
 }
 let ecoLast = 0, jsEma = 0, frameDue = 0, framePeriod = 0, worldLast = -Infinity;
 let qRace = { acc: 0, n: 0, js: 0 };
+// Suspend the main frame loop completely while the document is hidden.
+let mainRAF = null;
+function scheduleMainFrame() {
+  if (!document.hidden && mainRAF === null) mainRAF = requestAnimationFrame(frame);
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && mainRAF !== null) { cancelAnimationFrame(mainRAF); mainRAF = null; }
+  last = performance.now(); frameDue = 0;
+  if (!document.hidden) scheduleMainFrame();
+});
 function frame(now) {
+  mainRAF = null;
   const period = 1000 / (ECO || LOCK30 ? 30 : 60);
-  if (document.hidden) { last = now; frameDue = 0; requestAnimationFrame(frame); return; }
+  if (document.hidden) { last = now; frameDue = 0; return; }
   if (!frameDue || period !== framePeriod || now - frameDue > period*3) { frameDue = now; framePeriod = period; }
-  if (now + 1.2 < frameDue) { requestAnimationFrame(frame); return; }
+  if (now + 1.2 < frameDue) { scheduleMainFrame(); return; }
   frameDue += period; if (frameDue < now - period) frameDue = now + period;   // tope de 60 parejo (en 120 Hz o frecuencia variable el ritmo desparejo se ve a saltos); ahorro: 30
   { const ml = state === 'menu'; if (ml !== menuLo) { menuLo = ml; resize(); postCanvas = null; } }
-  if (ADS.busy) { last = now; requestAnimationFrame(frame); return; }   // con el anuncio en pantalla el juego no dibuja nada
+  if (ADS.busy) { last = now; scheduleMainFrame(); return; }   // con el anuncio en pantalla el juego no dibuja nada
   ecoLast = now; const fj0 = performance.now();
   const raw = Math.max(0, (now - last)/1000); let dt = Math.min(0.1, raw); last = Math.max(last, now);   // si el celular dibuja pocos cuadros, el juego igual va a velocidad real (ver pasos abajo)
   if (tut && !paused) dt *= tutTick(dt);
@@ -8835,7 +8970,7 @@ function frame(now) {
   bakedNow = false;
   if (BENCH) benchTick(now, performance.now() - fj0);
   else if (DIAG && !benchRaceDone && state === 'race' && stateT > 3) { benchRaceDone = true; benchStart(); }
-  requestAnimationFrame(frame);
+  scheduleMainFrame();
 }
 try { if (!introSeen() && localStorage.getItem('driftloop2test_champgo') !== '1') showSplash(); else introMark(); } catch(e) {}
 // la primera vez del día: una vuelta de prueba invisible con el auto base para fijar medallas justas
@@ -8857,14 +8992,14 @@ try { if (!introSeen() && localStorage.getItem('driftloop2test_champgo') !== '1'
   } catch(e) {}
   CALIB = false;
   prof.model = sv.model; prof.upgs = sv.upgs; applyWeather(sv.wx); C.rivales = sv.riv; C.posicionLargada = sv.pos; keyHeld = sv.kh;
-  parts.length = 0; skN = 0; skHead = 0; popups.length = 0; banners.length = 0; applySettings();
+  clearParts(); skN = 0; skHead = 0; popups.length = 0; banners.length = 0; applySettings();
   state = 'menu'; stateT = 0; resetRace();
 })();
 try { const dg = localStorage.getItem('driftloop2test_dailygo'); if (dg) { localStorage.removeItem('driftloop2test_dailygo'); introMark(); if (introPhase === 'splash') { spEl.style.display = 'none'; introPhase = null; } if (TRACK_KEY === 'diaria') setTimeout(() => dailyGo(dg), 350); } } catch(e) {}
 try { const lg = localStorage.getItem('driftloop2test_licgo'); if (lg) { localStorage.removeItem('driftloop2test_licgo'); if (LIC_TESTS.some(t => t.id === lg)) { introMark(); if (introPhase === 'splash') { spEl.style.display = 'none'; introPhase = null; } setTimeout(() => startLic(lg), 350); } } } catch(e) {}
 try { const rq = localStorage.getItem('driftloop2test_reqgo'); if (rq) { localStorage.removeItem('driftloop2test_reqgo'); if (REQ_EVENTS.some(e => e.id === rq)) { introMark(); if (introPhase === 'splash') { spEl.style.display = 'none'; introPhase = null; } setTimeout(() => startReq(rq), 350); } } } catch(e) {}
 try { if (localStorage.getItem('driftloop2test_evgo') === '1') { localStorage.removeItem('driftloop2test_evgo'); introMark(); if (introPhase === 'splash') { spEl.style.display = 'none'; introPhase = null; } setTimeout(startEvent, 350); } } catch(e) {}
-setInterval(() => { try { if (state === 'menu' && menuShown && !introPhase && !panelOpen && !paused && !garageOpen && prof.tut && bkEl.style.display !== 'flex') { const r = checkStreak(); if (r) showStreak(r); else { const g = troSum(troCheck()); if (g.length) toast(g); } } } catch(e) {} }, 2000);
+setInterval(() => { if (document.hidden) return; try { if (state === 'menu' && menuShown && !introPhase && !panelOpen && !paused && !garageOpen && prof.tut && bkEl.style.display !== 'flex') { const r = checkStreak(); if (r) showStreak(r); else { const g = troSum(troCheck()); if (g.length) toast(g); } } } catch(e) {} }, 2000);
 try { if (localStorage.getItem('driftloop2test_ttgo') === '1') { localStorage.removeItem('driftloop2test_ttgo'); introMark(); if (introPhase === 'splash') { spEl.style.display = 'none'; introPhase = null; } setTimeout(startTT, 350); } } catch(e) {}
 try {
   const pending = localStorage.getItem('driftloop2test_champgo') === '1' || sessionStorage.getItem('driftloop2test_champgo') === '1';
@@ -8873,7 +9008,7 @@ try {
     if (currentChampRound()) { introMark(); if (introPhase === 'splash') { spEl.style.display='none'; introPhase=null; } setTimeout(champGo,350); }
   }
 } catch(e) {}
-requestAnimationFrame(frame);
+scheduleMainFrame();
 </script>
 </body>
 </html>
